@@ -287,7 +287,16 @@ export class PowerManager {
         // Only record the signal as applied when every action succeeded. Latching
         // currentSignal after a failed switch would make a stuck relay look settled,
         // and the desired/current equality guards would never retry it (#293).
-        if (active && active.desiredSignal === signal && allSucceeded) {
+        //
+        // On success it is recorded whatever the zone wants by now, because that is
+        // what the relay is doing. Switching takes real time — a crelay or gpioset
+        // process, an HTTP call, queued behind other zones on the same device — and a
+        // zone that flips back mid-switch (every alert does: the player stops, then the
+        // restore starts it again) used to leave this unwritten. The relay was then off
+        // while the books said on, and the equality guards, believing the books,
+        // suppressed the very command that would have put it right: the room played on
+        // in silence until something else moved the bookkeeping (#359).
+        if (active && allSucceeded) {
           const previous = active.currentSignal;
           active.currentSignal = signal;
           if (previous !== signal) {
@@ -297,6 +306,22 @@ export class PowerManager {
               signal,
             });
             this.onSignalChanged?.(zoneId, signal);
+          }
+          if (active.desiredSignal !== signal) {
+            // The zone changed its mind while this was switching. Now that the books
+            // agree with the hardware, drive it the rest of the way — on immediately,
+            // off through its idle delay, exactly as setDesired would have.
+            this.log.debug('zone power manager re-driving signal after a mid-switch change', {
+              zoneId,
+              appliedSignal: signal,
+              desiredSignal: active.desiredSignal,
+            });
+            this.scheduleSignal(
+              zoneId,
+              active,
+              active.desiredSignal,
+              active.desiredSignal === 1 ? 0 : active.config.offDelayMs,
+            );
           }
         } else if (active && !allSucceeded) {
           this.log.debug('zone power manager leaving signal unconfirmed after failure', {

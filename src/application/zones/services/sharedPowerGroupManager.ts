@@ -131,6 +131,11 @@ export class SharedPowerGroupManager {
       previousDesired,
       desiredSignal,
     });
+    this.driveSignal(runtime, desiredSignal);
+  }
+
+  /** Take the group towards `desiredSignal`: on at once, off after its idle delay. */
+  private driveSignal(runtime: GroupRuntime, desiredSignal: PowerSignal): void {
     if (desiredSignal === 1) {
       if (runtime.offTimer) {
         clearTimeout(runtime.offTimer);
@@ -204,8 +209,21 @@ export class SharedPowerGroupManager {
         // Only mark the group as switched when every action succeeded. Latching
         // currentSignal after a failed crelay call would leave a physically energized
         // relay looking off, and the desired/current guards would never retry it (#293).
-        if (active && active.desiredSignal === signal && allSucceeded) {
+        //
+        // On success it is marked whatever the group wants by now, because that is what
+        // the relay is doing. A zone flipping back mid-switch otherwise left the books
+        // disagreeing with the hardware, and the equality guards then suppressed the
+        // command that would have corrected it (#359).
+        if (active && allSucceeded) {
           active.currentSignal = signal;
+          if (active.desiredSignal !== signal) {
+            this.log.debug('shared power group re-driving signal after a mid-switch change', {
+              groupId: active.id,
+              appliedSignal: signal,
+              desiredSignal: active.desiredSignal,
+            });
+            this.driveSignal(active, active.desiredSignal);
+          }
         } else if (active && !allSucceeded) {
           this.log.debug('shared power group leaving signal unconfirmed after failure', {
             groupId: active.id,

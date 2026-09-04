@@ -247,3 +247,51 @@ test('shared power group cancels pending offDelayMs when another zone becomes ac
     { type: 'gpio', signal: 0 },
   ]);
 });
+
+test('a group whose last zone returns mid-switch does not leave the relay stuck (#359)', async () => {
+  // Same race as the per-zone relay: an alert stops the only active zone and restores it
+  // while the group's "off" is still executing. Latching only when the group still wanted
+  // that signal left the relay off with the books saying on, and nothing put it right.
+  let releaseOff: (() => void) | undefined;
+  const calls: Array<{ signal: 0 | 1 }> = [];
+  const executor: PowerManagerExecutor = {
+    execute: async (_action, signal) => {
+      calls.push({ signal });
+      if (signal === 0 && !releaseOff) {
+        await new Promise<void>((resolve) => {
+          releaseOff = resolve;
+        });
+      }
+    },
+  };
+
+  const manager = new SharedPowerGroupManager(noopLogger, executor);
+  manager.configure(
+    [{ id: 'amp-living', powerManager: { offDelayMs: 0, gpio: { enabled: true, pin: 22 } } }],
+    [
+      {
+        id: 1,
+        name: 'Living',
+        sourceMac: '00:00:00:00:00:01',
+        volumes: {} as any,
+        powerManager: { powerGroupId: 'amp-living' },
+      } as any,
+    ],
+  );
+
+  manager.onStatePatch(1, { mode: 'play' } as any, { ...baseState, mode: 'play' } as any);
+  await wait(10);
+  assert.deepEqual(calls, [{ signal: 1 }]);
+
+  manager.onStatePatch(1, { mode: 'stop' } as any, { ...baseState, mode: 'stop' } as any);
+  await wait(10);
+  assert.deepEqual(calls, [{ signal: 1 }, { signal: 0 }]);
+
+  manager.onStatePatch(1, { mode: 'play' } as any, { ...baseState, mode: 'play' } as any);
+  await wait(10);
+
+  releaseOff?.();
+  await wait(20);
+
+  assert.deepEqual(calls, [{ signal: 1 }, { signal: 0 }, { signal: 1 }]);
+});

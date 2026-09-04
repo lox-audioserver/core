@@ -659,3 +659,96 @@ test('power manager ignores offDelayMs when offDelayEnabled is false', async () 
     { type: 'gpio', signal: 0 },
   ]);
 });
+
+test('a zone that flips back mid-switch does not leave the relay stuck (#359)', async () => {
+  // Switching takes real time. Every alert flips the zone twice in quick succession —
+  // the player stops, the restore starts it again — so the "on" can land while the "off"
+  // is still executing. The books then said on while the relay was off, and the equality
+  // guards suppressed the correction: the room played on in silence.
+  let releaseOff: (() => void) | undefined;
+  const calls: Array<{ signal: 0 | 1 }> = [];
+  const executor: PowerManagerExecutor = {
+    execute: async (_action, signal) => {
+      calls.push({ signal });
+      if (signal === 0 && !releaseOff) {
+        await new Promise<void>((resolve) => {
+          releaseOff = resolve;
+        });
+      }
+    },
+  };
+
+  const pm = new PowerManager(noopLogger, executor);
+  const zoneConfig = {
+    id: 1,
+    name: 'Living',
+    sourceMac: '00:00:00:00:00:01',
+    volumes: {} as any,
+    // "Switch off immediately" — the setting that makes every alert race.
+    powerManager: {
+      offDelayEnabled: false,
+      url: { enabled: true, onUrl: 'http://amp/on', offUrl: 'http://amp/off' },
+    },
+  } as any;
+
+  pm.onStatePatch(1, zoneConfig, { mode: 'play' }, { mode: 'play' } as any);
+  await wait(10);
+  assert.deepEqual(calls, [{ signal: 1 }]);
+
+  // The alert stops the player: off starts switching and hangs there.
+  pm.onStatePatch(1, zoneConfig, { mode: 'stop' }, { mode: 'stop' } as any);
+  await wait(10);
+  assert.deepEqual(calls, [{ signal: 1 }, { signal: 0 }]);
+
+  // The alert restores playback while that off is still in flight.
+  pm.onStatePatch(1, zoneConfig, { mode: 'play' }, { mode: 'play' } as any);
+  await wait(10);
+
+  releaseOff?.();
+  await wait(20);
+
+  // The relay must end up back on, matching the zone that is playing again.
+  assert.deepEqual(calls, [{ signal: 1 }, { signal: 0 }, { signal: 1 }]);
+  assert.equal(pm.isSignalOn(1), true);
+});
+
+test('an on that lands mid-switch still honours the idle delay for the following off (#359)', async () => {
+  // The mirror case: the zone stops while the "on" is still executing. Correcting course
+  // must not short-circuit the idle delay and cut the amp the instant it settled.
+  let releaseOn: (() => void) | undefined;
+  const calls: Array<{ signal: 0 | 1 }> = [];
+  const executor: PowerManagerExecutor = {
+    execute: async (_action, signal) => {
+      calls.push({ signal });
+      if (signal === 1 && !releaseOn) {
+        await new Promise<void>((resolve) => {
+          releaseOn = resolve;
+        });
+      }
+    },
+  };
+
+  const pm = new PowerManager(noopLogger, executor);
+  const zoneConfig = {
+    id: 1,
+    name: 'Living',
+    sourceMac: '00:00:00:00:00:01',
+    volumes: {} as any,
+    powerManager: {
+      offDelayMs: 60_000,
+      url: { enabled: true, onUrl: 'http://amp/on', offUrl: 'http://amp/off' },
+    },
+  } as any;
+
+  pm.onStatePatch(1, zoneConfig, { mode: 'play' }, { mode: 'play' } as any);
+  await wait(10);
+  pm.onStatePatch(1, zoneConfig, { mode: 'stop' }, { mode: 'stop' } as any);
+  await wait(10);
+
+  releaseOn?.();
+  await wait(20);
+
+  // On applied, off left waiting out the minute rather than fired on the spot.
+  assert.deepEqual(calls, [{ signal: 1 }]);
+  assert.equal(pm.isSignalOn(1), true);
+});
