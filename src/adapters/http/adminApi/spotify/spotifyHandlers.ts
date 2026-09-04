@@ -1,3 +1,4 @@
+import type { YtMusicAdminPort } from '@/ports/YtMusicAdminPort';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { ComponentLogger } from '@/shared/logging/logger';
 import type { ConfigPort } from '@/ports/ConfigPort';
@@ -21,8 +22,6 @@ import {
 } from '@/adapters/http/adminApi/spotify/soloistHandlers';
 import type { Route } from '@/adapters/http/adminApi/routeTypes';
 import { defaultConfig } from '@/adapters/http/adminApi/config/configHandlers';
-import { verifyYtMusicCookie } from '@/adapters/content/providers/ytmusic/ytmusicAuthState';
-import { normalizePotServerUrl } from '@/adapters/content/providers/ytmusic/ytmusicPoToken';
 import type { MusicAssistantConnectionResult } from '@/adapters/http/adminApi/musicassistant/musicAssistantHelpers';
 import {
   isValidMusicAssistantHost,
@@ -32,6 +31,13 @@ import {
 export type { MusicAssistantConnectionResult };
 
 export type SpotifyHandlerDeps = {
+  /**
+   * The YouTube stack's management operations; see YtMusicAdminPort.
+   *
+   * This screen shares the cookie check and the PO Token URL rules with the YT Music one, so it
+   * asks the same object rather than importing the same two modules a second time.
+   */
+  ytMusicAdmin: YtMusicAdminPort;
   log: ComponentLogger;
   configPort: ConfigPort;
   notifier: NotifierPort;
@@ -261,7 +267,7 @@ async function handleStreamingServiceCreate(
       // often already worthless by the time it is pasted — and it fails silently, as
       // an empty library rather than an error. Saying so now beats letting someone
       // conclude the service is broken.
-      const verdict = await verifyYtMusicCookie(pasted);
+      const verdict = await deps.ytMusicAdmin.verifyCookie(pasted);
       if (verdict.state === 'expired' || verdict.state === 'invalid') {
         deps.sendJson(res, 400, {
           error: verdict.state === 'invalid' ? 'ytmusic-cookie-invalid' : 'ytmusic-cookie-expired',
@@ -328,7 +334,7 @@ async function handleStreamingServiceCreate(
       typeof body?.ytmusicCookie === 'string' && body.ytmusicCookie.trim()
         ? body.ytmusicCookie.trim()
         : undefined,
-    ytmusicPoTokenUrl: normalizePotServerUrl(body?.ytmusicPoTokenUrl) || undefined,
+    ytmusicPoTokenUrl: deps.ytMusicAdmin.normalizePotServerUrl(body?.ytmusicPoTokenUrl) || undefined,
     youtubeApiKey:
       typeof body?.youtubeApiKey === 'string' && body.youtubeApiKey.trim()
         ? body.youtubeApiKey.trim()

@@ -37,6 +37,7 @@ import { BrowserZoneRegistry } from '@/application/zones/browserZoneRegistry';
 import { createInputsAdapter } from '@/adapters/inputs/InputsAdapter';
 import { createOutputsAdapter } from '@/adapters/outputs/OutputsAdapter';
 import { outputDiscovery } from '@/adapters/outputs/outputDiscovery';
+import { ytMusicAdmin } from '@/adapters/content/providers/ytmusic/ytmusicAdmin';
 import type { OutputPorts } from '@/adapters/outputs/outputPorts';
 import { EngineAdapter } from '@/adapters/engine/EngineAdapter';
 import { AudioStreamEngine } from '@/engine/audioStreamEngine';
@@ -771,6 +772,7 @@ export function createRuntime(): Runtime {
 
     httpService = new HttpService(config.http, {
       outputDiscovery,
+      ytMusicAdmin,
       onReinitialize: handleReinitialize,
       onSoftRestart: handleSoftRestart,
       onLoxoneToggle: (enabled) => (enabled ? enableLoxone() : disableLoxone()),

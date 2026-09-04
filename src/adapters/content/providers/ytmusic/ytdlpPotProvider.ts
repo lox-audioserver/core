@@ -1,3 +1,4 @@
+import type { PotPluginStatus, PotPluginInstallResult } from '@/ports/YtMusicAdminPort';
 import fsp from 'node:fs/promises';
 import { constants as fsConstants } from 'node:fs';
 import path from 'node:path';
@@ -40,15 +41,6 @@ function pluginZipPath(): string {
 function versionMarkerPath(): string {
   return path.join(pluginDir(), '.version');
 }
-
-export type PotPluginStatus = {
-  /** Version installed here, or null when the plugin is absent. */
-  installed: string | null;
-  /** Newest published release, when the feed could be reached. */
-  latest: string | null;
-  /** Null when `latest` is unknown, so "unknown" never reads as "up to date". */
-  updateAvailable: boolean | null;
-};
 
 async function installedVersion(): Promise<string | null> {
   try {
@@ -112,10 +104,6 @@ export async function getPotPluginStatus(): Promise<PotPluginStatus> {
     updateAvailable: latestVersion && installed ? latestVersion !== installed : null,
   };
 }
-
-export type PotPluginInstallResult =
-  | { ok: true; version: string; previous: string | null }
-  | { ok: false; error: string };
 
 /**
  * Fetch the plugin and put it in place, but only once yt-dlp has confirmed it loads.

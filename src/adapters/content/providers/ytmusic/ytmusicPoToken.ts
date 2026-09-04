@@ -1,3 +1,4 @@
+import type { PotServerPing } from '@/ports/YtMusicAdminPort';
 import { createLogger } from '@/shared/logging/logger';
 
 const log = createLogger('Content', 'YTMusicPoToken');
@@ -15,14 +16,6 @@ const log = createLogger('Content', 'YTMusicPoToken');
  * for another app needs to configure nothing.
  */
 export const DEFAULT_PO_TOKEN_SERVER_URL = 'http://127.0.0.1:4416';
-
-export type PotServerPing = {
-  ok: boolean;
-  /** Version the server reports, when it answered with one. */
-  version: string | null;
-  /** Why the ping failed, for the setup screen to show verbatim. */
-  error: string | null;
-};
 
 type CacheEntry = { ping: PotServerPing; expiresAt: number };
 

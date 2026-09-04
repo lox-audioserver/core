@@ -1,3 +1,4 @@
+import type { YtMusicAdminPort } from '@/ports/YtMusicAdminPort';
 import type { OutputDiscoveryPort } from '@/ports/OutputDiscoveryPort';
 import type { AdminApiOptions } from '@/adapters/http/adminApi/adminApiHandler';
 import { SonnClientApiHandler } from '@/adapters/http/sonnClientApi/sonnClientApiHandler';
@@ -34,6 +35,8 @@ import type { WebdavServer } from '@/adapters/webdav/webdavServer';
  * depended on was to read a fifty-two field bag and follow each name by hand.
  */
 export type AdminSurfaceDeps = {
+  /** The YouTube stack's management operations; see YtMusicAdminPort. */
+  ytMusicAdmin: YtMusicAdminPort;
   /** Finds playback devices on the network; see OutputDiscoveryPort. */
   outputDiscovery: OutputDiscoveryPort;
     alertFiles: AlertFilesPort;
@@ -76,6 +79,7 @@ export function createAdminApiDeps(
   services: AdminSurfaceServices,
 ): AdminApiOptions {
   return {
+    ytMusicAdmin: deps.ytMusicAdmin,
     outputDiscovery: deps.outputDiscovery,
     onReinitialize: deps.onReinitialize,
     onSoftRestart: deps.onSoftRestart,

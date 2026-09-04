@@ -1,9 +1,16 @@
+import type { YtMusicAdminPort } from '@/ports/YtMusicAdminPort';
 import type { ServerResponse } from 'node:http';
 import type { ComponentLogger } from '@/shared/logging/logger';
-import { getYtDlpStatus, updateYtDlp } from '@/adapters/content/providers/ytmusic/ytdlpBinary';
 import type { Route } from '@/adapters/http/adminApi/routeTypes';
 
 export type YtDlpHandlerDeps = {
+  /**
+   * The YouTube stack's management operations; see YtMusicAdminPort.
+   *
+   * Injected rather than imported: these ping a local server, run pip and download a binary, so
+   * a route that reaches for them directly cannot be exercised at all.
+   */
+  ytMusicAdmin: YtMusicAdminPort;
   log: ComponentLogger;
   sendJson: (res: ServerResponse, status: number, body: unknown) => void;
 };
@@ -32,7 +39,7 @@ export function buildYtDlpRoutes(deps: YtDlpHandlerDeps): Route[] {
 
 async function handleStatus(res: ServerResponse, deps: YtDlpHandlerDeps): Promise<void> {
   try {
-    deps.sendJson(res, 200, await getYtDlpStatus());
+    deps.sendJson(res, 200, await deps.ytMusicAdmin.ytDlpStatus());
   } catch (err) {
     deps.log.warn('yt-dlp status failed', { err });
     deps.sendJson(res, 500, { error: 'ytdlp-status-failed' });
@@ -40,11 +47,11 @@ async function handleStatus(res: ServerResponse, deps: YtDlpHandlerDeps): Promis
 }
 
 async function handleUpdate(res: ServerResponse, deps: YtDlpHandlerDeps): Promise<void> {
-  const result = await updateYtDlp();
+  const result = await deps.ytMusicAdmin.updateYtDlp();
   if (!result.ok) {
     // 502, not 500: what failed is the reach out to GitHub or the file it sent back.
     deps.sendJson(res, 502, { error: result.error });
     return;
   }
-  deps.sendJson(res, 200, { ...await getYtDlpStatus(), previous: result.previous });
+  deps.sendJson(res, 200, { ...await deps.ytMusicAdmin.ytDlpStatus(), previous: result.previous });
 }

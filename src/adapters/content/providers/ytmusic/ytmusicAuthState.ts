@@ -1,3 +1,4 @@
+import type { YtMusicAuthState, YtMusicAuthStatus } from '@/ports/YtMusicAdminPort';
 import crypto from 'node:crypto';
 import { createLogger } from '@/shared/logging/logger';
 import {
@@ -8,26 +9,6 @@ import {
 } from '@/adapters/content/providers/ytmusic/ytmusicInnertube';
 
 const log = createLogger('Content', 'YTMusicAuth');
-
-/**
- * What the configured YouTube Music cookie is currently worth.
- *
- * `expired` is the state this file exists for. YouTube rotates account cookies on
- * open browser tabs as a security measure, so a cookie copied out of a live session
- * stops identifying anyone within the hour — and it stops silently, answering 200
- * with a sign-in prompt. Before this, that turned into a `log.warn` and an empty
- * library, which is exactly what "my library is gone" looked like from the outside
- * with nothing telling anyone to paste a new cookie.
- */
-export type YtMusicAuthState = 'ok' | 'expired' | 'invalid' | 'missing' | 'unknown';
-
-export type YtMusicAuthStatus = {
-  state: YtMusicAuthState;
-  /** When this was last established, or null when never checked. */
-  checkedAt: number | null;
-  /** Detail worth showing a user, when there is any. */
-  message: string | null;
-};
 
 const UNKNOWN: YtMusicAuthStatus = { state: 'unknown', checkedAt: null, message: null };
 

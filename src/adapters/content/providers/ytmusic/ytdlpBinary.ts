@@ -1,3 +1,4 @@
+import type { YtDlpStatus, YtDlpUpdateResult } from '@/ports/YtMusicAdminPort';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import fsp from 'node:fs/promises';
@@ -22,19 +23,6 @@ const log = createLogger('Content', 'YtDlpBinary');
 const RELEASES_API = 'https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest';
 const downloadUrlFor = (version: string): string =>
   `https://github.com/yt-dlp/yt-dlp/releases/download/${encodeURIComponent(version)}/yt-dlp`;
-
-export type YtDlpStatus = {
-  /** Version actually in use, or null when no yt-dlp can be run at all. */
-  version: string | null;
-  /** Path of the binary that would run now. */
-  source: string;
-  /** True when that path is the managed copy rather than the one from the image. */
-  managed: boolean;
-  /** Newest published release, when it could be looked up. */
-  latest: string | null;
-  /** Null when `latest` is unknown, so "unknown" never renders as "up to date". */
-  updateAvailable: boolean | null;
-};
 
 export function managedBinaryPath(): string {
   return resolveDataDir('bin', 'yt-dlp');
@@ -99,10 +87,6 @@ export async function getYtDlpStatus(): Promise<YtDlpStatus> {
     updateAvailable: latest && version ? latest !== version : null,
   };
 }
-
-export type YtDlpUpdateResult =
-  | { ok: true; version: string; previous: string | null }
-  | { ok: false; error: string };
 
 /**
  * Fetch the newest release and put it in place, but only once it has proven it runs.

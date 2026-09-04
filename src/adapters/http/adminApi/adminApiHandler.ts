@@ -1,3 +1,4 @@
+import type { YtMusicAdminPort } from '@/ports/YtMusicAdminPort';
 import { providerTitle } from '@/adapters/content/providerRegistry';
 import type { OutputDiscoveryPort } from '@/ports/OutputDiscoveryPort';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -27,6 +28,8 @@ import type { SonnCorePeerRegistry } from '@/adapters/discovery/sonnCorePeerRegi
 import type { MqttPublisher } from '@/adapters/mqtt/mqttPublisher';
 
 export type AdminApiOptions = {
+  /** The YouTube stack's management operations; see YtMusicAdminPort. */
+  ytMusicAdmin: YtMusicAdminPort;
   /** Finds playback devices on the network; see OutputDiscoveryPort. */
   outputDiscovery: OutputDiscoveryPort;
   onReinitialize?: () => Promise<boolean>;
@@ -176,6 +179,7 @@ export class AdminApiHandler {
   private readonly zoneManager: ZoneManagerFacade;
   private readonly configPort: ConfigPort;
   private readonly outputDiscovery: OutputDiscoveryPort;
+  private readonly ytMusicAdmin: YtMusicAdminPort;
   private readonly spotifyInputService: SpotifyInputService;
   private readonly sendspinLineInService: SendspinLineInService;
   private readonly syncMediaServer?: () => Promise<void>;
@@ -212,6 +216,7 @@ export class AdminApiHandler {
     this.zoneManager = options.zoneManager;
     this.configPort = options.configPort;
     this.outputDiscovery = options.outputDiscovery;
+    this.ytMusicAdmin = options.ytMusicAdmin;
     this.spotifyInputService = options.spotifyInputService;
     this.sendspinLineInService = options.sendspinLineInService;
     this.syncMediaServer = options.syncMediaServer;
@@ -262,16 +267,19 @@ export class AdminApiHandler {
       }),
       ...buildYtDlpRoutes({
         log: this.log,
+        ytMusicAdmin: this.ytMusicAdmin,
         sendJson: (res, status, payload) => sendJson(res, status, payload),
       }),
       ...buildYtMusicRoutes({
         log: this.log,
+        ytMusicAdmin: this.ytMusicAdmin,
         configPort: this.configPort,
         readJsonBody: (req, res) => readJsonBody(req, res),
         sendJson: (res, status, payload) => sendJson(res, status, payload),
       }),
       ...buildSpotifyRoutes({
         log: this.log,
+        ytMusicAdmin: this.ytMusicAdmin,
         configPort: this.configPort,
         notifier: this.notifier,
         contentManager: this.contentManager,

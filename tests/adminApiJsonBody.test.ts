@@ -4,6 +4,7 @@ import { PassThrough } from 'node:stream';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { test } from './testHarness';
 import { makeOutputDiscoveryFake } from './fakes/outputDiscovery';
+import { makeYtMusicAdminFake } from './fakes/ytMusicAdmin';
 import {
   AdminApiHandler,
   buildSqueezeliteAdminPlayerSnapshot,
@@ -149,6 +150,7 @@ function createHandler(): AdminApiHandler {
   favoritesManager.initOnce({ zoneManager });
   return new AdminApiHandler({
     outputDiscovery: makeOutputDiscoveryFake(),
+    ytMusicAdmin: makeYtMusicAdminFake(),
     zoneManager,
     configPort: noopConfigPort,
     notifier: makeNotifierFake(),
