@@ -62,3 +62,86 @@ test('readiness names the step that is missing rather than just refusing', async
     JSON.stringify(readiness),
   );
 });
+
+/**
+ * The level a room shows in the Spotify app.
+ *
+ * Its own thing, separate from the level it plays at: Soloist applies no volume — it passes one to
+ * the sound server, and ours records it without touching the samples — so what these pin is a
+ * label being kept true, never a taper being applied. A device that is never told stands at the
+ * 100 it was started with, which is what #372 was: rooms reading full while they were at twelve.
+ */
+
+type FakeWs = {
+  isLoggedIn: boolean;
+  isActive: boolean;
+  setVolume: (level: number) => boolean;
+};
+
+function withRunner(args: { loggedIn: boolean; owner: string; zoneVolume?: number | null }): {
+  service: SoloistPlaybackService;
+  sent: number[];
+  login: () => void;
+} {
+  const service = new SoloistPlaybackService(
+    fakeConfigPort({ content: { spotify: { soloist: { apiKey: 'spak_test' } } }, zones: [{ id: 1 }] }),
+  );
+  const sent: number[] = [];
+  const ws: FakeWs = {
+    isLoggedIn: args.loggedIn,
+    isActive: false,
+    setVolume: (level: number) => {
+      sent.push(level);
+      return true;
+    },
+  };
+  const runner = { ws, owner: args.owner, volume: null, volumeLatch: null };
+  (service as unknown as { runners: Map<number, unknown> }).runners.set(1, runner);
+  (service as unknown as { controller: unknown }).controller = {
+    currentZoneVolume: () => args.zoneVolume ?? null,
+  };
+  const internals = service as unknown as {
+    onEvent: (zoneId: number, event: { type: string; logged_in?: boolean }) => void;
+  };
+  return { service, sent, login: () => internals.onEvent(1, { type: 'auth_state', logged_in: true }) };
+}
+
+test('a room nobody is listening to is still told what it is at', () => {
+  // The case that was broken. An idle device is exactly the one somebody is looking at in the
+  // device picker, so "only the room that is sounding" was the wrong condition to gate on.
+  const { service, sent } = withRunner({ loggedIn: true, owner: 'idle' });
+  assert.equal(service.setVolume(1, 12), true);
+  assert.deepEqual(sent, [12]);
+});
+
+test('a daemon that has not signed in is not told anything', () => {
+  // Before its login Soloist answers every command with "requires authentication" and the level
+  // is simply lost, so there is nothing to be gained by saying it early.
+  const { service, sent } = withRunner({ loggedIn: false, owner: 'idle' });
+  assert.equal(service.setVolume(1, 12), false);
+  assert.deepEqual(sent, []);
+});
+
+test('the level already agreed on is not said again', () => {
+  // Every `set_volume` comes back as a `volume_changed`, so repeating one is how a loop starts.
+  const { service, sent } = withRunner({ loggedIn: true, owner: 'idle' });
+  service.setVolume(1, 40);
+  service.setVolume(1, 40);
+  assert.deepEqual(sent, [40]);
+});
+
+test('signing in is when a room can first say what it is at', () => {
+  // A daemon comes up at boot, long before anybody turns a knob — without this the app would show
+  // the room at full until the first volume change of the day.
+  const { sent, login } = withRunner({ loggedIn: true, owner: 'idle', zoneVolume: 34 });
+  login();
+  assert.deepEqual(sent, [34]);
+});
+
+test('a zone this server does not have leaves the level alone', () => {
+  // The reader answers `null` for it, and a room whose level is unknown is better left showing
+  // whatever it has than pushed to a made-up number.
+  const { sent, login } = withRunner({ loggedIn: true, owner: 'idle', zoneVolume: null });
+  login();
+  assert.deepEqual(sent, []);
+});

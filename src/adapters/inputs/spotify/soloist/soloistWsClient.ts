@@ -61,6 +61,13 @@ export type SoloistStateEvent = {
    * this rather than be retried blindly.
    */
   available_actions?: Record<string, unknown>;
+  /**
+   * Whether Soloist has signed in, on the `auth_state` that says so.
+   *
+   * It arrives the moment the socket opens for a daemon whose session was already stored, and
+   * later for one that is being signed in by somebody picking the room in their Spotify app.
+   */
+  logged_in?: boolean;
 };
 
 /** Soloist refuses anything outside 0-100, and a zone's level can arrive as a fraction. */
@@ -173,9 +180,9 @@ export class SoloistWsClient extends EventEmitter {
   }
 
   private handleMessage(raw: WebSocket.RawData): void {
-    let event: SoloistStateEvent & { logged_in?: boolean; message?: string };
+    let event: SoloistStateEvent & { message?: string };
     try {
-      event = JSON.parse(raw.toString()) as SoloistStateEvent & { logged_in?: boolean };
+      event = JSON.parse(raw.toString()) as SoloistStateEvent & { message?: string };
     } catch {
       return;
     }
@@ -217,7 +224,7 @@ export class SoloistWsClient extends EventEmitter {
         this.off('event', onEvent);
         resolve(ok);
       };
-      const onEvent = (event: SoloistStateEvent & { logged_in?: boolean }): void => {
+      const onEvent = (event: SoloistStateEvent): void => {
         if (event.type === 'auth_state' && event.logged_in === true) {
           done(true);
         }
@@ -230,6 +237,17 @@ export class SoloistWsClient extends EventEmitter {
   /** True while Spotify is playing on this device rather than merely mirroring the account. */
   public get isActive(): boolean {
     return this.active;
+  }
+
+  /**
+   * True once Soloist has signed in, which is when it starts accepting commands.
+   *
+   * A far weaker condition than {@link isActive}, and the right one for anything the device shows
+   * rather than plays: a signed-in daemon nobody is listening to still appears in the Spotify app
+   * carrying a level of its own.
+   */
+  public get isLoggedIn(): boolean {
+    return this.loggedIn;
   }
 
   private send(command: string, extra: Record<string, unknown> = {}): boolean {
@@ -285,9 +303,12 @@ export class SoloistWsClient extends EventEmitter {
   /**
    * Tell Spotify what level the room is at, so the app's slider stands where the zone does.
    *
-   * A label, not a taper. Soloist is started at 100 and never attenuates, and the sound card it
-   * plays into keeps the level it is handed rather than applying it — so this number reaches the
-   * slider and the volume Connect reports for this device, and nothing else.
+   * A label, not a taper. Soloist has no volume of its own: it passes the level on to whatever
+   * sound server it plays into — `pa_context_set_sink_input_volume`, or a PipeWire control — and
+   * the sound server here is this process, a card that records the level and hands the samples on
+   * untouched. Measured at 5, 20 and 100 within one track: the cvolume arrives at the card each
+   * time and the peak of the delivered audio does not move. So this number reaches the slider and
+   * the level Connect reports for the device, and a lossless stream stays what Spotify sent.
    */
   public setVolume(volume: number): boolean {
     return this.send('set_volume', { volume: clampVolume(volume) });

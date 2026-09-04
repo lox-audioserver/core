@@ -446,8 +446,11 @@ export function startPersistent(params: {
     // both files and answers on it, which is measurable, so we name the port and skip the
     // discovery. Zones still cannot collide: each one is handed a free port before it starts.
     '-w', `127.0.0.1:${wsPort}`,
-    // Volume belongs to the engine. Anything below 100 is applied in software before the sink and
-    // ends the bit-exactness this backend exists for.
+    // The level this device advertises in the Spotify app until the room says otherwise, which it
+    // does as soon as the daemon has signed in. A label rather than a taper: Soloist applies no
+    // volume itself but passes it to the sound server, and ours records the level and hands the
+    // samples on untouched — measured, see `SoloistWsClient.setVolume`. 100 rather than Soloist's
+    // default of 40 because a device that has attenuated nothing should not claim it has.
     '-i', '100',
   ];
   return runTracked(zoneId, args, env, 'connect', onLine);
@@ -484,6 +487,8 @@ export function startSingleTrack(params: {
     // Bounded rather than the default of no limit: this store is written to on every track.
     '-z', '512',
     '-w', `127.0.0.1:${wsPort}`,
+    // Nothing advertises this run, so the number is never seen by anybody; full scale is simply
+    // what it is true to say about a run that attenuates nothing.
     '-i', '100',
   ];
   return runTracked(zoneId, args, env, 'track', onLine);

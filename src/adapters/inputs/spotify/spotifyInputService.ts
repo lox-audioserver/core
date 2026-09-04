@@ -59,9 +59,10 @@ export class SpotifyInputService {
   /**
    * Put a zone's level on the Spotify app's slider.
    *
-   * Only for a room the app is driving, where somebody is looking at that slider. A run of our own
-   * is never told: it plays at full scale so the samples reach the sound card untouched, and the
-   * room's own output is where its volume belongs.
+   * Every zone whose Connect daemon has signed in, not only the one the app is driving: an idle
+   * device carries its own level in the app's device list, and one that was never told the room's
+   * stands at the 100 it was started with. A run of our own is never told — it advertises nothing,
+   * so there is no slider for the number to stand on.
    */
   public setDeviceVolume(zoneId: number, volumePercent: number): void {
     if (!this.soloist.isEnabled()) {

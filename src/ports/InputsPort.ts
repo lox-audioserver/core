@@ -111,6 +111,17 @@ export type SpotifyConnectController = InputPlaybackController & {
    * where every other client's volume is applied.
    */
   zoneVolume(zoneId: number, level: number): void;
+  /**
+   * What the room is at, for a device that has only just signed in.
+   *
+   * The other direction of {@link zoneVolume}, and there for the same reason: a Connect device
+   * carries a level of its own and shows it in the Spotify app whether or not anybody is playing
+   * through it. The moment its daemon signs in, nothing has happened to report — so there is a
+   * level to be read rather than one to be handed over.
+   *
+   * `null` for a zone this server does not have.
+   */
+  currentZoneVolume(zoneId: number): number | null;
 };
 
 export type MusicAssistantInputHandlers = {

@@ -571,6 +571,12 @@ export class SoloistPlaybackService {
 
     this.runners.set(zoneId, runner);
     this.log.info('soloist running for zone', { zoneId });
+    // A stored session is reported the moment the socket opens, which is before this runner
+    // exists — so that first `auth_state` reached an `onEvent` with nothing to act on, and the
+    // level would wait for the next time somebody turned the knob.
+    if (ws.isLoggedIn) {
+      this.seedVolume(zoneId);
+    }
     return runner;
   }
 
@@ -585,6 +591,17 @@ export class SoloistPlaybackService {
   private onEvent(zoneId: number, event: SoloistStateEvent): void {
     const runner = this.runners.get(zoneId);
     if (!runner) {
+      return;
+    }
+    // A daemon that has just signed in is advertising the level it was started with, and this is
+    // the first moment that can be corrected — before this it refuses commands outright. Handled
+    // ahead of everything below because a login is about the device rather than about the music:
+    // the guards further down are all "is this event about the room's own playback", and this one
+    // is not.
+    if (event.type === 'auth_state') {
+      if (event.logged_in === true) {
+        this.seedVolume(zoneId);
+      }
       return;
     }
     // This server is driving the room from its own queue, through a run of its own. Whatever the
@@ -726,20 +743,28 @@ export class SoloistPlaybackService {
   /**
    * Put the zone's own level on the app's slider.
    *
-   * Only for a room the app is driving, and only while that room is the one sounding: this is the
-   * slider a listener is looking at, and telling an idle device would move the one belonging to
-   * whatever room actually has the account.
+   * Told to every daemon that is signed in, not only the one that is sounding. A Connect device
+   * carries a level of its own and shows it in the app's device list whether or not anybody is
+   * playing through it, and a device that was never told the room's shows the 100 it was started
+   * with — a room reading 100 while it is at 12, which is the whole of #372.
    *
-   * Never a track run of ours. Those are started at 100 and stay there — the level Soloist is told
-   * is applied to the samples before they reach the card, and a run that is not being looked at in
-   * any app has no slider for the number to stand on. The room's own output is where its volume
-   * belongs.
+   * Safe to send because it is a label rather than a taper. Soloist applies no volume itself: it
+   * passes the level to the sound server, and the sound server here is this process — a card that
+   * records the level and hands the samples on untouched. Measured at 5, 20 and 100 within one
+   * track, the peak of the delivered audio did not move, so a lossless stream stays bit-for-bit
+   * what Spotify sent. That is the point of the backend and it is not being traded for a number.
+   *
+   * Nothing echoes back into the room: an idle device's `volume_changed` is dropped on sight (see
+   * `onEvent`), and an active one recognises the level it has just agreed to.
+   *
+   * Still never a track run of ours. Those advertise nothing, so there is no slider anywhere for
+   * their number to stand on; the room's own daemon is the device a listener is looking at.
    *
    * Returns whether it was this backend's to answer, so a caller can try elsewhere.
    */
   public setVolume(zoneId: number, level: number): boolean {
     const runner = this.runners.get(zoneId);
-    if (!runner || !runner.ws.isActive || runner.owner !== 'connect') {
+    if (!runner || !runner.ws.isLoggedIn) {
       return false;
     }
     const clamped = clampVolume(level);
@@ -750,6 +775,21 @@ export class SoloistPlaybackService {
     runner.volumeLatch = null;
     runner.volume = clamped;
     return runner.ws.setVolume(clamped);
+  }
+
+  /**
+   * Tell a room's daemon what the room is at, once it can be told.
+   *
+   * Read from the zone rather than remembered here: a daemon signs in on its own schedule — at
+   * boot, or after its process was replaced — and the level by then is whatever the room has
+   * settled on since, which is the zone's business and nobody else's.
+   */
+  private seedVolume(zoneId: number): void {
+    const level = this.controller?.currentZoneVolume(zoneId);
+    if (typeof level !== 'number') {
+      return;
+    }
+    this.setVolume(zoneId, level);
   }
 
   /**

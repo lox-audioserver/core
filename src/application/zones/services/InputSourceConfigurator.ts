@@ -182,6 +182,16 @@ export class InputSourceConfigurator {
       // input mode it is in. Soloist plays through the engine like any queue source, so a zone
       // it is carrying is often not in spotify mode at all — the guard above would drop it.
       zoneVolume: (zoneId, level) => playback.updateInputVolume(zoneId, level),
+      // Read straight off the zone, because a Connect daemon can sign in at any moment — at boot,
+      // or after its process was replaced — and what the room is at by then is the room's own
+      // business rather than something the input service kept a copy of.
+      currentZoneVolume: (zoneId) => {
+        const ctx = zoneRepo.get(zoneId);
+        if (!ctx) {
+          return null;
+        }
+        return ctx.state.volume ?? getZoneDefaultVolume(ctx.config);
+      },
       updateTiming: (zoneId, elapsed, duration) => {
         const ctx = zoneRepo.get(zoneId);
         if (!ctx || ctx.activeInput !== 'spotify') {
