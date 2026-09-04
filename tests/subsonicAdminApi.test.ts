@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { test } from './testHarness';
+import { notBrowsed } from './fakes/browsableServiceBackend';
+import {
+  buildBrowsableServices,
+  parseProviderAllowlist,
+} from '../src/adapters/content/browsableServices';
 import { buildSubsonicRoutes } from '../src/adapters/http/adminApi/subsonic/subsonicHandlers';
 import type { ConfigPort } from '../src/ports/ConfigPort';
 import type { AudioServerConfig } from '../src/domain/config/types';
@@ -61,6 +66,9 @@ function makeRoutes(
     log: { debug() {}, info() {}, warn() {}, error() {}, spam() {} } as never,
     configPort: port,
     httpPort: 7090,
+    listBrowsableServices: (providers) =>
+      buildBrowsableServices(port, notBrowsed, parseProviderAllowlist(providers)),
+    providerTitle: (provider) => provider,
     readJsonBody: async () => jsonBody,
     sendJson: (_res, status, body) => {
       captured.status = status;

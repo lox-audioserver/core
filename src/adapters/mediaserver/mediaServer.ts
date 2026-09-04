@@ -8,10 +8,6 @@ import { buildBaseUrl } from '@/shared/streamUrl';
 import { resolveCoverHost } from '@/shared/utils/net';
 import { SsdpAdvertiser, UpnpMediaServer, MEDIA_SERVER_PATHS } from '@sonn-audio/node-upnp';
 import {
-  buildBrowsableServices,
-  parseProviderAllowlist,
-} from '@/adapters/content/browsableServices';
-import {
   MediaContentProvider,
   type ServiceDef,
 } from '@/adapters/mediaserver/mediaContentProvider';
@@ -51,7 +47,7 @@ export class MediaServer {
   constructor(
     private readonly config: ConfigPort,
     contentManager: ContentManager,
-    content: ContentPort,
+    private readonly content: ContentPort,
     engine: EnginePort,
     private readonly httpPort: number,
     // Shared SSDP advertiser (one UDP socket on :1900 for all our UPnP devices).
@@ -143,13 +139,14 @@ export class MediaServer {
    * the per-service tile icons DLNA controllers show.
    */
   private buildServiceDefs(): ServiceDef[] {
-    const allow = parseProviderAllowlist(this.config.getConfig().content.mediaServer?.providers);
     // Cache-buster: some controllers (B&O) cache tile icons hard by URL, so a
     // changed icon at the same path can keep showing the stale image. The version
     // token forces a fresh fetch when the icon set changes.
     const icon = (path: string): string => `${this.baseUrl()}${path}?v=${ICON_VERSION}`;
 
-    return buildBrowsableServices(this.config, allow).map((service) => {
+    return this.content
+      .listBrowsableServices(this.config.getConfig().content.mediaServer?.providers)
+      .map((service) => {
       const iconPath = PROVIDER_ICON_PATHS[service.provider];
       return {
         key: service.key,

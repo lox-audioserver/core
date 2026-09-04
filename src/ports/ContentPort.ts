@@ -1,4 +1,9 @@
-import type { ContentFolder, ContentFolderItem, ContentItemMetadata } from '@/ports/ContentTypes';
+import type {
+  BrowsableService,
+  ContentFolder,
+  ContentFolderItem,
+  ContentItemMetadata,
+} from '@/ports/ContentTypes';
 import type { QueueItem } from '@/ports/types/queueTypes';
 import type { PlaybackSourceResolveArgs, StreamResolution } from '@/ports/types/StreamResolution';
 import type { BridgeRegistry } from '@/domain/zones/bridgeIdentity';
@@ -17,6 +22,14 @@ export interface ContentPort {
   configureProviders(): void;
   /** Which service owns this audiopath — `applemusic`, `ytmusic`, … — or null. */
   providerForAudiopath(audiopath: string | null | undefined): string | null;
+  /**
+   * The browsable top-level services, each bound so a caller can browse it directly.
+   *
+   * `providers` is a configured allowlist of provider *types*; empty or absent means no
+   * restriction, so an accidentally-empty list cannot hide everything. Answered per call, since
+   * a service appears the moment an account is configured and no restart follows.
+   */
+  listBrowsableServices(providers?: string[] | null): BrowsableService[];
   getMediaFolder(folderId: string, offset: number, limit: number): Promise<ContentFolder | null>;
   /** Describe a container by id: a folder never names itself when browsed. */
   resolveFolder(service: string, user: string, folderId: string): Promise<ContentFolderItem | null>;

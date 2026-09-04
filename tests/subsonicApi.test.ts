@@ -6,6 +6,10 @@ import { SubsonicApi } from '../src/adapters/subsonic/subsonicApi';
 import { musicFolderId } from '../src/adapters/subsonic/subsonicIds';
 import type { ConfigPort } from '../src/ports/ConfigPort';
 import type { ContentManager } from '../src/adapters/content/contentManager';
+import {
+  buildBrowsableServices,
+  parseProviderAllowlist,
+} from '../src/adapters/content/browsableServices';
 import type { ContentPort } from '../src/ports/ContentPort';
 import type { EnginePort } from '../src/ports/EnginePort';
 import type { ContentFolder, ContentFolderItem } from '../src/ports/ContentTypes';
@@ -151,6 +155,11 @@ function makeHarness(options: { directoryLimit?: number; bigFolderSize?: number 
     resolveMetadata: async () => null,
     getScanStatus: () => 0,
     rescanLibrary: async () => {},
+    // The catalogue now comes off the content layer rather than being assembled by each
+    // consumer, so the double answers it the way the real one does: with the real builder,
+    // bound to this double.
+    listBrowsableServices: (providers?: string[] | null) =>
+      buildBrowsableServices(configPort, contentManager, parseProviderAllowlist(providers)),
   } as unknown as ContentManager;
 
   const api = new SubsonicApi(

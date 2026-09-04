@@ -309,6 +309,7 @@ test('recents record fills metadata from the harvest cache (no live lookup)', as
     const contentPort = {
       resolveMetadata: (p: string) => cm.resolveMetadata(p),
       getDefaultSpotifyAccountId: () => null,
+      listBrowsableServices: () => [],
       getBridgeRegistry: () => buildBridgeRegistry([]),
     } as unknown as ContentPort;
     const recents = createRecentsManager({

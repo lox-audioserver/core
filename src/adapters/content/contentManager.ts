@@ -1,6 +1,11 @@
+import {
+  buildBrowsableServices,
+  parseProviderAllowlist,
+} from '@/adapters/content/browsableServices';
 import { resizeTuneInCoverUrl, COVER_ART_NOW_PLAYING_SIZE } from '@/shared/coverArt';
 import type { ConfigPort } from '@/ports/ConfigPort';
 import type {
+  BrowsableService,
   ContentFolder,
   ContentFolderItem,
   ContentItemMetadata,
@@ -239,6 +244,17 @@ export class ContentManager {
 
   public getDefaultSpotifyAccountId(): string | null {
     return this.requireSpotify().getDefaultAccountId();
+  }
+
+  /**
+   * The browsable service catalogue. See {@link ContentPort.listBrowsableServices}.
+   *
+   * Built here rather than by each caller: the DLNA server, the Subsonic API, the public API and
+   * the admin screen all used to call the builder themselves and pass this manager into every
+   * `browse` they got back, which is how a content-layer detail ended up in four adapter families.
+   */
+  public listBrowsableServices(providers?: string[] | null): BrowsableService[] {
+    return buildBrowsableServices(this.configPort, this, parseProviderAllowlist(providers));
   }
 
   public getMediaFolder(

@@ -38,6 +38,7 @@ function makeQueueController(resolve: (folderId: string) => ContentFolder | null
   const calls: string[] = [];
   const contentPort = {
     getDefaultSpotifyAccountId: () => null,
+    listBrowsableServices: () => [],
     getServiceTrack: async () => null,
     getMediaFolder: async () => null,
     resolveMetadata: async () => null,

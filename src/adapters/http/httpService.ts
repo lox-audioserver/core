@@ -107,7 +107,7 @@ export class HttpService {
       options.lineInActivation,
       options.bluetoothInput,
     );
-    this.browseService = new BrowseService(options.configPort, options.contentManager);
+    this.browseService = new BrowseService(options.contentManager);
     this.aboutService = new AboutService({
       describeItem: (id) => this.browseService.describeItem(id),
       relatedArtists: (id, limit) => this.browseService.relatedArtists(id, limit),

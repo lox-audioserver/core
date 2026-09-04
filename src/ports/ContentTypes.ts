@@ -1,5 +1,6 @@
 import type { SpotifyAccountConfig as ConfigSpotifyAccountConfig } from '@/domain/config/types';
 import type { ContentItemKind } from '@/domain/media/contentKind';
+import type { ProviderCapabilities } from '@/ports/ProviderCapabilities';
 
 export interface ContentServiceAccount {
   id: string;
@@ -109,6 +110,56 @@ export interface ContentFolder {
   /** The container's byline (an album's artist), same contract as {@link ContentFolder.coverurl}. */
   artist?: string;
 }
+
+/**
+ * One browsable top-level service the server can expose to an external content
+ * client (the DLNA MediaServer's ContentDirectory, the Subsonic API, …).
+ *
+ * `key` is the stable identity used in the client-facing object/entity ids: the
+ * literals `library`/`radio` for the built-ins, and the service-native name for a
+ * streaming account (`applemusic`, or `applemusic:p0gngd` when a service has more
+ * than one). One provider type can have several accounts, each of which is its own
+ * service here. Deliberately NOT the Loxone bridge id: that word describes a
+ * disguise these clients are not party to.
+ *
+ * `browse` and `relatedArtists` are already bound to the content layer: a consumer holds a
+ * service and asks it, rather than being handed a function and having to supply the backend.
+ * That is what lets this type live in a port at all.
+ *
+ * `id3Probe` is the folder whose children carry the collection entry points
+ * ("Albums"/"Artists"/"Playlists"). For a streaming bridge that is its root; for
+ * the local library the root lists storages, so it points one level deeper.
+ */
+export type BrowsableService = {
+  key: string;
+  /** Provider type — used for allowlist matching and default titles. */
+  provider: string;
+  title: string;
+  /** Native folder id for this service's own top level. */
+  rootFolderId: string;
+  /** Folder to probe for collection entry points, when different from the root. */
+  id3Probe: string;
+  /** `globalSearch` source for this service, or null when it cannot search. */
+  searchSource: string | null;
+  /**
+   * What this service can actually do — which item kinds its search returns, and whether
+   * its catalogue is larger than the user's collection.
+   *
+   * Distinct from `searchSource`, which only names the search *endpoint*: two services can
+   * both be searchable and disagree about albums. A consumer should offer the kinds listed
+   * here rather than assume every service serves the same set, which is what
+   * `globalsearch/describe` used to assert for all of them.
+   */
+  capabilities: ProviderCapabilities;
+  browse: (folderId: string, offset: number, limit: number) => Promise<ContentFolder | null>;
+  /**
+   * The artists this service itself puts beside one of its own, when it has the notion.
+   *
+   * Absent for the local library and the radio tile, and that absence is the point: "who else
+   * would I like" is editorial data a catalogue owner has and a folder of files does not.
+   */
+  relatedArtists?: (folderId: string, limit: number) => Promise<ContentFolderItem[]>;
+};
 
 export interface ContentFolderSection {
   id: string;

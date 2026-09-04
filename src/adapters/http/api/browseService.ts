@@ -7,28 +7,12 @@
  * Its own file rather than a block inside `httpService`, because there is real logic here:
  * decoding ids, honouring declared capabilities, and reporting paging honestly.
  */
-import {
-  buildBrowsableServices,
-  parseProviderAllowlist,
-  type BrowsableService,
-} from '@/adapters/content/browsableServices';
 import type { ContentManager } from '@/adapters/content/contentManager';
 import { toApiBrowseItem, toApiContainer } from '@/adapters/http/api/browseProjection';
-import {
-  decodeBrowseRef,
-  encodeContainerRef,
-  type BrowseRef,
-} from '@/domain/media/browseRef';
-import type {
-  ApiBrowseItem,
-  ApiBrowseResult,
-  ApiItemKind,
-  ApiSearchResult,
-  ApiService,
-} from '@/domain/zones/apiTypes';
+import { decodeBrowseRef, encodeContainerRef, type BrowseRef } from '@/domain/media/browseRef';
+import type { ApiBrowseItem, ApiBrowseResult, ApiItemKind, ApiSearchResult, ApiService } from '@/domain/zones/apiTypes';
 import { detectServiceFromAudiopath } from '@/domain/zones/audiopath';
-import type { ConfigPort } from '@/ports/ConfigPort';
-import type { ContentFolderItem } from '@/ports/ContentTypes';
+import type { BrowsableService, ContentFolderItem } from '@/ports/ContentTypes';
 import { createLogger } from '@/shared/logging/logger';
 
 /**
@@ -65,16 +49,13 @@ function looksLikeAKindName(name: string | undefined, kind: string): boolean {
 export class BrowseService {
   private readonly log = createLogger('Api', 'Browse');
 
-  constructor(
-    private readonly configPort: ConfigPort,
-    private readonly contentManager: ContentManager,
-  ) {}
+  constructor(private readonly contentManager: ContentManager) {}
 
   /** Rebuilt per call so a config change applies without a restart, as elsewhere. */
   private services(): BrowsableService[] {
     // No allowlist: the allowlists that exist are per-consumer (Subsonic and DLNA each have
     // their own), and this API exposes what the server has.
-    return buildBrowsableServices(this.configPort, parseProviderAllowlist(undefined));
+    return this.contentManager.listBrowsableServices();
   }
 
   private serviceByKey(key: string): BrowsableService | undefined {
@@ -105,7 +86,7 @@ export class BrowseService {
     if (!service) {
       return null;
     }
-    const folder = await service.browse(this.contentManager, ref.folderId, start, limit);
+    const folder = await service.browse(ref.folderId, start, limit);
     if (!folder) {
       return null;
     }
@@ -171,7 +152,7 @@ export class BrowseService {
       return [];
     }
     const items = await service
-      .relatedArtists(this.contentManager, ref.folderId, limit)
+      .relatedArtists(ref.folderId, limit)
       .catch((error: unknown) => {
         this.log.debug('related artists failed', {
           service: ref.service,

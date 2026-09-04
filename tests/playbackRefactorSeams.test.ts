@@ -31,6 +31,7 @@ function makeQueueItem(overrides: Partial<QueueItem>): QueueItem {
 
 const noopContentPort: ContentPort = {
   getDefaultSpotifyAccountId: () => null,
+  listBrowsableServices: () => [],
   getBridgeRegistry: () => ({
     byServiceSlug: new Map(),
     byBridgeId: new Map(),

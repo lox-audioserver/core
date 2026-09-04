@@ -34,12 +34,7 @@ export type ServiceDef = {
   iconUrl?: string;
   /** `globalSearch` source for this service (`local`, `applemusic`, …), or null when it can't search. */
   searchSource: string | null;
-  browse: (
-    cm: ContentManager,
-    folderId: string,
-    offset: number,
-    limit: number,
-  ) => Promise<ContentFolder | null>;
+  browse: (folderId: string, offset: number, limit: number) => Promise<ContentFolder | null>;
 };
 
 // protocolInfo for our MP3 stream. The DLNA.ORG_PN=MP3 profile name is
@@ -355,7 +350,7 @@ export class MediaContentProvider implements ContentProvider {
 
     let folder: ContentFolder | null = null;
     try {
-      folder = await def.browse(this.contentManager, folderId, offset, limit);
+      folder = await def.browse(folderId, offset, limit);
     } catch (error) {
       this.log.warn('browse failed', {
         service: serviceKey,

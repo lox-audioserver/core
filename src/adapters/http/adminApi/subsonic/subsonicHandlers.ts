@@ -1,12 +1,8 @@
+import type { BrowsableService } from '@/ports/ContentTypes';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { ComponentLogger } from '@/shared/logging/logger';
 import type { ConfigPort } from '@/ports/ConfigPort';
 import type { Route } from '@/adapters/http/adminApi/routeTypes';
-import {
-  buildBrowsableServices,
-  parseProviderAllowlist,
-} from '@/adapters/content/browsableServices';
-import { providerTitle } from '@/adapters/content/providerRegistry';
 import { musicFolderId } from '@/adapters/subsonic/subsonicIds';
 import { SubsonicAuthenticator } from '@/adapters/subsonic/subsonicAuthenticator';
 import { listUsers } from '@/application/auth/localUsers';
@@ -21,6 +17,15 @@ const DIRECTORY_LIMIT_DEFAULT = 1000;
 export type SubsonicHandlerDeps = {
   log: ComponentLogger;
   configPort: ConfigPort;
+  /**
+   * The browsable catalogue, and the name to show for a provider type.
+   *
+   * Injected rather than imported: reaching the content layer's own registry for a label pulled
+   * every provider implementation into this module, and the catalogue builder made this screen
+   * the fourth place that assembled it.
+   */
+  listBrowsableServices: (providers?: string[] | null) => BrowsableService[];
+  providerTitle: (provider: string) => string;
   /** Gateway port, so the status endpoint can hand the UI a ready-to-use client URL. */
   httpPort: number;
   readJsonBody: (req: IncomingMessage, res: ServerResponse, maxBytes?: number) => Promise<unknown>;
@@ -62,17 +67,18 @@ export function buildSubsonicRoutes(deps: SubsonicHandlerDeps): Route[] {
 function handleStatus(res: ServerResponse, deps: SubsonicHandlerDeps): void {
   const cfg = deps.configPort.getConfig();
   const subsonic = cfg.content.subsonic;
-  const allow = parseProviderAllowlist(subsonic?.providers);
-
-  // The full catalogue, ignoring the allowlist, so the UI can render every
-  // service as a toggle — including the ones currently switched off.
-  const all = buildBrowsableServices(deps.configPort, null);
+  // The full catalogue, ignoring the allowlist, so the UI can render every service as a toggle —
+  // including the ones currently switched off. The second call applies the allowlist, so the
+  // "is this exposed?" answer comes from the same code that will decide it at request time
+  // rather than from a second reading of the config here.
+  const all = deps.listBrowsableServices();
+  const exposed = new Set(deps.listBrowsableServices(subsonic?.providers).map((s) => s.provider));
   const services = all.map((service) => ({
     key: service.key,
     provider: service.provider,
     title: service.title,
     musicFolderId: musicFolderId(service.key),
-    exposed: !allow || allow.has(service.provider),
+    exposed: exposed.has(service.provider),
     /** Whether this service can answer search3 (radio cannot). */
     searchable: service.searchSource !== null,
   }));
@@ -80,8 +86,8 @@ function handleStatus(res: ServerResponse, deps: SubsonicHandlerDeps): void {
   // Distinct provider types, which is the granularity the allowlist works at.
   const providerOptions = [...new Set(all.map((service) => service.provider))].map((provider) => ({
     provider,
-    label: providerTitle(provider),
-    enabled: !allow || allow.has(provider),
+    label: deps.providerTitle(provider),
+    enabled: exposed.has(provider),
   }));
 
   const auth = new SubsonicAuthenticator(deps.configPort).availability();
@@ -185,7 +191,7 @@ async function handleConfigUpdate(
       return;
     } else {
       const known = new Set(
-        buildBrowsableServices(deps.configPort, null).map((service) => service.provider),
+        deps.listBrowsableServices().map((service) => service.provider),
       );
       const cleaned = body.providers
         .map((value) => String(value).trim().toLowerCase())

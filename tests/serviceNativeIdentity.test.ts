@@ -13,6 +13,7 @@ import {
   serviceLabelForAudiopath,
 } from '../src/domain/media/serviceIdentity';
 import { buildBrowsableServices } from '../src/adapters/content/browsableServices';
+import { notBrowsed } from './fakes/browsableServiceBackend';
 import type { ConfigPort } from '../src/ports/ConfigPort';
 import { SpotifyServiceManager } from '../src/adapters/content/providers/spotifyServiceManager';
 import type { StreamingServiceConfig } from '../src/domain/config/types';
@@ -199,7 +200,7 @@ const configWith = (bridges: StreamingServiceConfig[]): ConfigPort =>
 // party to, and it used to be in every object id they handed out.
 test('no browsable service carries a Loxone bridge id', () => {
   for (const bridges of [SINGLE, MULTI]) {
-    for (const service of buildBrowsableServices(configWith(bridges))) {
+    for (const service of buildBrowsableServices(configWith(bridges), notBrowsed)) {
       assert.ok(!service.key.includes('bridge'), `key ${service.key}`);
       assert.ok(!(service.searchSource ?? '').includes('bridge'), `source ${service.searchSource}`);
       assert.ok(!(service.searchSource ?? '').includes('spotify@'), `source ${service.searchSource}`);
@@ -209,7 +210,7 @@ test('no browsable service carries a Loxone bridge id', () => {
 
 test('browsable services are named service-natively, one per account', () => {
   assert.deepEqual(
-    buildBrowsableServices(configWith(SINGLE)).map((s) => [s.key, s.searchSource]),
+    buildBrowsableServices(configWith(SINGLE), notBrowsed).map((s) => [s.key, s.searchSource]),
     [
       ['library', 'local'],
       ['radio', null],
@@ -218,7 +219,7 @@ test('browsable services are named service-natively, one per account', () => {
     ],
   );
   assert.deepEqual(
-    buildBrowsableServices(configWith(MULTI)).map((s) => [s.key, s.searchSource]),
+    buildBrowsableServices(configWith(MULTI), notBrowsed).map((s) => [s.key, s.searchSource]),
     [
       ['library', 'local'],
       ['radio', null],

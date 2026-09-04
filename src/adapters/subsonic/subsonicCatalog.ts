@@ -2,14 +2,9 @@ import path from 'node:path';
 import { createLogger } from '@/shared/logging/logger';
 import type { ConfigPort } from '@/ports/ConfigPort';
 import type { ContentManager } from '@/adapters/content/contentManager';
-import type { ContentFolder, ContentFolderItem } from '@/ports/ContentTypes';
+import type { BrowsableService, ContentFolder, ContentFolderItem } from '@/ports/ContentTypes';
 import { decodeTrackUri } from '@/domain/media/trackIdentity';
 import { resolveItemKind } from '@/domain/media/contentKind';
-import {
-  buildBrowsableServices,
-  parseProviderAllowlist,
-  type BrowsableService,
-} from '@/adapters/content/browsableServices';
 import { audioOutputSettings, mp3BitrateToBps } from '@/ports/types/audioFormat';
 import {
   encodeContainerId,
@@ -119,7 +114,7 @@ export class SubsonicCatalog {
 
   public services(): BrowsableService[] {
     const cfg = this.config.getConfig().content.subsonic;
-    return buildBrowsableServices(this.config, parseProviderAllowlist(cfg?.providers));
+    return this.contentManager.listBrowsableServices(cfg?.providers);
   }
 
   public serviceByKey(key: string): BrowsableService | undefined {
@@ -156,7 +151,7 @@ export class SubsonicCatalog {
     limit: number,
   ): Promise<ContentFolder | null> {
     try {
-      return await service.browse(this.contentManager, folderId, offset, limit);
+      return await service.browse(folderId, offset, limit);
     } catch (error) {
       this.log.warn('browse failed', {
         service: service.key,

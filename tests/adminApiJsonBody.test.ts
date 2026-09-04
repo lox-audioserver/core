@@ -62,6 +62,7 @@ const noopConfigPort: ConfigPort = {
 };
 const noopContentPort: ContentPort = {
   getDefaultSpotifyAccountId: () => null,
+  listBrowsableServices: () => [],
   getBridgeRegistry: () => ({
     byServiceSlug: new Map(),
     byBridgeId: new Map(),

@@ -211,6 +211,7 @@ type ZoneHarness = {
 
 const noopContentPort: ContentPort = {
   getDefaultSpotifyAccountId: () => null,
+  listBrowsableServices: () => [],
   getBridgeRegistry: () => buildBridgeRegistry([]),
   resolveFolder: async () => null,
   resolveMetadata: async () => null,

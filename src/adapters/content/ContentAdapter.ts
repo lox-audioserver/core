@@ -1,7 +1,12 @@
 import type { ContentManager } from '@/adapters/content/contentManager';
 import type { StreamProvider } from '@/adapters/content/StreamProvider';
 import type { ContentPort, BuildQueueOptions } from '@/ports/ContentPort';
-import type { ContentFolder, ContentFolderItem, ContentItemMetadata } from '@/ports/ContentTypes';
+import type {
+  BrowsableService,
+  ContentFolder,
+  ContentFolderItem,
+  ContentItemMetadata,
+} from '@/ports/ContentTypes';
 import type { PlaybackSourceResolveArgs, StreamResolution } from '@/ports/types/StreamResolution';
 import { decodeAudiopath, detectServiceFromAudiopath } from '@/domain/zones/audiopath';
 import type { QueueItem } from '@/ports/types/queueTypes';
@@ -32,6 +37,10 @@ export class ContentAdapter implements ContentPort {
 
   public getDefaultSpotifyAccountId(): string | null {
     return this.contentManager.getDefaultSpotifyAccountId();
+  }
+
+  public listBrowsableServices(providers?: string[] | null): BrowsableService[] {
+    return this.contentManager.listBrowsableServices(providers);
   }
 
   public getBridgeRegistry() {

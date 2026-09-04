@@ -2,6 +2,10 @@ import assert from 'node:assert/strict';
 import { test } from './testHarness';
 import { BrowseService } from '../src/adapters/http/api/browseService';
 import type { ContentManager } from '../src/adapters/content/contentManager';
+import {
+  buildBrowsableServices,
+  parseProviderAllowlist,
+} from '../src/adapters/content/browsableServices';
 import { encodeContainerRef } from '../src/domain/media/browseRef';
 import type { ConfigPort } from '../src/ports/ConfigPort';
 
@@ -40,6 +44,10 @@ const contentManager = {
     kind: 'album',
     tag: 'album',
   }),
+  // The catalogue comes off the content layer now, so the double answers it with the real
+  // builder bound to itself — which is what keeps this test exercising the Apple Music branch.
+  listBrowsableServices: (providers?: string[] | null) =>
+    buildBrowsableServices(config, contentManager, parseProviderAllowlist(providers)),
 } as unknown as ContentManager;
 
 test('browse answers with the id it was asked with, and the kind that id carries', async () => {
@@ -48,7 +56,7 @@ test('browse answers with the id it was asked with, and the kind that id carries
     service: 'applemusic',
     folderId: 'applemusic:library-artist:1',
   });
-  const result = await new BrowseService(config, contentManager).browse(id, 0, 50);
+  const result = await new BrowseService(contentManager).browse(id, 0, 50);
 
   assert.ok(result);
   assert.equal(result.container?.id, id, 'the container is the thing that was asked for');

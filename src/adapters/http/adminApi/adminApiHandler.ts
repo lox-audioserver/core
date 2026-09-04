@@ -1,3 +1,4 @@
+import { providerTitle } from '@/adapters/content/providerRegistry';
 import type { OutputDiscoveryPort } from '@/ports/OutputDiscoveryPort';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createLogger } from '@/shared/logging/logger';
@@ -366,6 +367,8 @@ export class AdminApiHandler {
         log: this.log,
         configPort: this.configPort,
         httpPort: this.httpPort,
+        listBrowsableServices: (providers) => this.contentManager.listBrowsableServices(providers),
+        providerTitle: (provider) => providerTitle(provider),
         readJsonBody: (req, res, max) => readJsonBody(req, res, max),
         sendJson: (res, status, payload) => sendJson(res, status, payload),
       }),
