@@ -1,7 +1,7 @@
 {
   "name": "sonn-core",
   "version": "4.0.0-beta.20",
-  "description": "Complete multiroom audio solution \u2014 runs standalone or integrates with Loxone as a full Loxone Audio Server emulation",
+  "description": "Complete multiroom audio solution — runs standalone or integrates with Loxone as a full Loxone Audio Server emulation",
   "private": true,
   "repository": {
     "type": "git",
@@ -66,8 +66,8 @@
     "@sonn-audio/node-sendspin": "^0.6.1",
     "@sonn-audio/node-slimproto": "0.1.4",
     "@sonn-audio/node-snapcast": "^0.2.2",
-    "@sonn-audio/node-sonos": "^0.2.4",
-    "@sonn-audio/node-upnp": "^0.4.0",
+    "@sonn-audio/node-sonos": "^0.3.0",
+    "@sonn-audio/node-upnp": "^0.4.2",
     "better-sqlite3": "^13.0.3",
     "bonjour-service": "^1.3.0",
     "crc": "^4.3.2",
