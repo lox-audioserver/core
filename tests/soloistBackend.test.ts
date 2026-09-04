@@ -145,3 +145,51 @@ test('a zone this server does not have leaves the level alone', () => {
   login();
   assert.deepEqual(sent, []);
 });
+
+/**
+ * Quality is read out of a store when a process starts, so a setting that changes it has to reach
+ * the processes that are already running or it does not mean anything until the next restart.
+ */
+
+function withRunners(owners: string[]): {
+  service: SoloistPlaybackService;
+  stopped: number[];
+  left: number[];
+} {
+  const service = new SoloistPlaybackService(
+    fakeConfigPort({ content: { spotify: { soloist: { apiKey: 'spak_test' } } } }),
+  );
+  const stopped: number[] = [];
+  const runners = (service as unknown as { runners: Map<number, unknown> }).runners;
+  owners.forEach((owner, index) => {
+    const zoneId = index + 1;
+    runners.set(zoneId, {
+      owner,
+      track: null,
+      stream: null,
+      volume: null,
+      volumeLatch: null,
+      ws: { close: () => undefined },
+      handle: { stop: () => stopped.push(zoneId) },
+    });
+  });
+  return { service, stopped, left: [] };
+}
+
+test('a quality change gives up the rooms that are not playing', () => {
+  // Dropping them is the whole mechanism: the syncZones that follows a settings save starts them
+  // again, and starting is what writes the prefs.
+  const { service, stopped } = withRunners(['idle', 'queue']);
+  service.dropForQualityChange();
+  assert.deepEqual(stopped, [1, 2]);
+  assert.equal((service as unknown as { runners: Map<number, unknown> }).runners.size, 0);
+});
+
+test('a room the app is playing through keeps its daemon', () => {
+  // Taking somebody's music away to apply a preference they would hear on the next track is the
+  // wrong way round; that room picks the change up when its session ends.
+  const { service, stopped } = withRunners(['connect']);
+  service.dropForQualityChange();
+  assert.deepEqual(stopped, []);
+  assert.equal((service as unknown as { runners: Map<number, unknown> }).runners.size, 1);
+});

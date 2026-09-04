@@ -306,6 +306,35 @@ export class SoloistPlaybackService {
   }
 
   /**
+   * Give up the daemons a changed quality setting has to reach.
+   *
+   * The prefs are read once, when a process starts, so a room that is already advertising itself
+   * is still on the settings it was born with — a switch that only takes effect after a restart of
+   * the whole server is not a switch. Dropping the runners here is enough: the `syncZones` that
+   * follows every settings change starts them again, and starting is what writes the prefs.
+   *
+   * A room the app is playing through is left alone. Taking somebody's music away to apply a
+   * preference they would hear on the next track is the wrong way round; it picks the change up
+   * when that session ends. Nothing is done for this server's own queue either, and nothing needs
+   * to be: a track run states the prefs itself, every track.
+   */
+  public dropForQualityChange(): void {
+    for (const [zoneId, runner] of [...this.runners]) {
+      if (runner.owner === 'connect') {
+        this.log.info('a room the app is playing through keeps its quality until that session ends', {
+          zoneId,
+        });
+        continue;
+      }
+      this.log.info('restarting soloist so a quality change reaches this room', { zoneId });
+      this.finishTrack(zoneId);
+      runner.ws.close();
+      runner.handle.stop();
+      this.runners.delete(zoneId);
+    }
+  }
+
+  /**
    * Keep the program itself up to date.
    *
    * Soloist expires 90 days after it was built, and until now that meant someone had to notice a
@@ -504,9 +533,10 @@ export class SoloistPlaybackService {
     // set for a device they have never opened the settings of.
     await applyPreferences(zoneStore(zoneId), {
       lossless: this.settings.lossless !== false,
-      // The app is driving; Spotify's own normalization is the one a listener expects here, and
-      // nothing of ours is normalizing what comes through.
-      normalize: true,
+      // The app is driving, so what a listener expects here is what their other Spotify clients
+      // do — which is why this defaults to on. It is a real gain on the samples, though, and the
+      // one thing between a lossless stream and a bit-exact one, so it is theirs to turn off.
+      normalize: this.settings.normalize !== false,
     });
 
     // The control channel's port is settled here rather than by Soloist, so there is nothing to
@@ -960,8 +990,9 @@ export class SoloistPlaybackService {
         deviceName: this.zoneName(zoneId),
         lossless: this.settings.lossless !== false,
         // Nobody else is normalizing this audio, and the engine is the only thing in the path that
-        // knows what Spotify measured for the track.
-        normalize: true,
+        // knows what Spotify measured for the track — so on by default here too. Read per track,
+        // which is why the queue path needs no restart to follow the setting.
+        normalize: this.settings.normalize !== false,
         seekPositionMs,
         env: await this.audio.childEnv(zoneId),
         onEnd: (end) => this.onTrackEnded(zoneId, uri, end),

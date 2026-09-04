@@ -70,7 +70,7 @@ export function buildSpotifyRoutes(deps: SpotifyHandlerDeps): Route[] {
       pattern: /^\/spotify\/soloist\/settings$/,
       handler: async (req, res) => {
         const body = (await deps.readJsonBody(req, res)) as
-          | { apiKey?: string; lossless?: boolean }
+          | { apiKey?: string; lossless?: boolean; normalize?: boolean }
           | null;
         if (res.writableEnded) return;
         await handleSoloistSettings(res, deps, body);

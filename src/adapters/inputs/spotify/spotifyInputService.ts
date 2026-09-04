@@ -71,6 +71,20 @@ export class SpotifyInputService {
     this.soloist.setVolume(zoneId, volumePercent);
   }
 
+  /**
+   * Let a changed quality setting reach the rooms.
+   *
+   * Quality is written into a store before a process starts and read only then, so the rooms that
+   * are already up have to be given up for the change to mean anything. See
+   * `SoloistPlaybackService.dropForQualityChange`; the `syncZones` that follows starts them again.
+   */
+  public dropForQualityChange(): void {
+    if (!this.soloist.isEnabled()) {
+      return;
+    }
+    this.soloist.dropForQualityChange();
+  }
+
   /** The accounts that can play through Soloist, and which of them have been signed in. */
   public async soloistAccounts(): Promise<Array<{ id: string; label: string; paired: boolean }>> {
     return this.soloist.pairedAccounts();

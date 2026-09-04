@@ -84,6 +84,9 @@ export async function handleSoloistStatus(
     // The key is the switch: with one there is Spotify, without one there is not.
     hasApiKey: Boolean(settings.apiKey?.trim()),
     lossless: settings.lossless !== false,
+    // Spotify's loudness normalisation. On everywhere by default, and the one gain between a
+    // lossless stream and a bit-exact one — see `SoloistConfig.normalize`.
+    normalize: settings.normalize !== false,
     expiry: settings.expiry ?? null,
     // Where the program comes from now: this server fetches it, so the screen can say when it last
     // looked rather than asking anyone to keep track of a 90-day clock.
@@ -99,8 +102,10 @@ export async function handleSoloistStatus(
 export async function handleSoloistSettings(
   res: ServerResponse,
   deps: SoloistHandlerDeps,
-  body: { apiKey?: string; lossless?: boolean } | null,
+  body: { apiKey?: string; lossless?: boolean; normalize?: boolean } | null,
 ): Promise<void> {
+  const before = deps.configPort.getConfig()?.content?.spotify?.soloist ?? {};
+  const qualityBefore = `${before.lossless !== false}/${before.normalize !== false}`;
   await deps.configPort.updateConfig((cfg) => {
     const spotify = cfg.content?.spotify;
     if (!spotify) {
@@ -109,6 +114,9 @@ export async function handleSoloistSettings(
     const next = { ...(spotify.soloist ?? {}) };
     if (typeof body?.lossless === 'boolean') {
       next.lossless = body.lossless;
+    }
+    if (typeof body?.normalize === 'boolean') {
+      next.normalize = body.normalize;
     }
     if (typeof body?.apiKey === 'string') {
       const trimmed = body.apiKey.trim();
@@ -124,6 +132,14 @@ export async function handleSoloistSettings(
   // only runs on a restart. Without this, switching player in the screen did nothing until
   // something else happened to reload the zones — and every room quietly left the Spotify app.
   const cfg = deps.configPort.getConfig();
+  const after = cfg?.content?.spotify?.soloist ?? {};
+  // Quality is read out of a store when a process starts, so a room already advertising itself is
+  // still on the old setting until it is given up. Only when it actually changed: dropping every
+  // room's daemon on an unrelated save would take them out of the Spotify app for a moment each
+  // time somebody pressed Save.
+  if (`${after.lossless !== false}/${after.normalize !== false}` !== qualityBefore) {
+    deps.spotifyInputService.dropForQualityChange();
+  }
   deps.spotifyInputService.syncZones(cfg.zones ?? [], cfg.inputs?.spotify ?? null);
   await handleSoloistStatus(res, deps);
 }

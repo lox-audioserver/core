@@ -752,6 +752,25 @@ export interface SoloistConfig {
    */
   lossless?: boolean;
   /**
+   * Spotify's own loudness normalisation, which is a gain applied inside Soloist's decoder.
+   *
+   * Defaults to on, as it is in every Spotify client: it is what keeps a mixed playlist from
+   * jumping between a quiet master and a loud one, and nothing else in this server's path is
+   * levelling anything.
+   *
+   * Off is the only way the stream is bit-exact. Volume is not — it is handed to the sound card
+   * as a label and never applied to the samples — but this gain is real and multiplies every one
+   * of them, so a setup that wants what Spotify sent, sample for sample, has to turn it off and
+   * accept the loudness differences that come back with it. Measured on one track with
+   * `scripts/soloist-quality-probe.ts gain`: 1.35 dB up, peak and RMS alike, taking the peak to
+   * 0.975 of full scale — a quiet master being lifted towards Spotify's target, and close enough
+   * to the ceiling that a louder one is what the clamp in `floatToS24` is there for.
+   *
+   * Read once, when a process starts: this server's own track runs get it per track, and a room's
+   * Connect daemon is restarted when this changes.
+   */
+  normalize?: boolean;
+  /**
    * The `client expires in N days` figure Soloist reports at startup, with when it was read.
    * Stored so the admin screen can warn before a build dies rather than after.
    */
