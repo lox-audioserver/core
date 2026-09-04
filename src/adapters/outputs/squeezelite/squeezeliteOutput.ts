@@ -21,6 +21,8 @@ export interface SqueezeliteOutputConfig {
  * flapping client produces more, so without this each one would start another stream.
  */
 const RESUME_DEBOUNCE_MS = 1500;
+/** How often the player's own position is passed on for lag measurement. */
+const POSITION_REPORT_INTERVAL_MS = 2000;
 
 export const SQUEEZELITE_OUTPUT_DEFINITION: OutputConfigDefinition = {
   id: 'squeezelite',
@@ -68,6 +70,7 @@ export class SqueezeliteOutput implements ZoneOutput {
   private pendingCrossfadeSec = 0;
   private pendingAutostart = false;
   private autostartTimer?: NodeJS.Timeout;
+  private lastPositionReportAt = 0;
   private lastJoinAt = 0;
   private lastResumeAt = 0;
   private lastJoinLeaderId: number | null = null;
@@ -469,6 +472,7 @@ export class SqueezeliteOutput implements ZoneOutput {
     }
     if (event.type === EventType.PLAYER_HEARTBEAT) {
       this.ports.squeezeliteGroup.notifyPlaybackTick(this.zoneId);
+      this.reportPlayoutPosition(player);
     }
     if (event.type === EventType.PLAYER_BUFFER_READY) {
       this.triggerAutostart(player, 'buffer_ready');
@@ -477,6 +481,34 @@ export class SqueezeliteOutput implements ZoneOutput {
     if (event.type === EventType.PLAYER_DECODER_ERROR) {
       this.ports.outputHandlers.onOutputError(this.zoneId, 'squeezelite decode');
     }
+  }
+
+  /**
+   * Say where the player reports itself to be, so the zone can measure its lag.
+   *
+   * This output cannot state its buffer up front — `getLatencyMs` here is the operator's
+   * own offset, not a measurement — but SlimProto's heartbeat carries the client's elapsed
+   * time, and the gap to the server's clock is exactly the audio the player is still
+   * holding. An alert needs that to know when it will be heard (#359).
+   *
+   * Position only, deliberately: a report carrying no status is read for the measurement
+   * and applies no zone state, so this cannot turn into a second source of truth for what
+   * the room is doing.
+   */
+  private reportPlayoutPosition(player: SlimClient): void {
+    if (mapPlayerState(player.state) !== 'playing') {
+      return;
+    }
+    const elapsedMs = player.elapsedMilliseconds;
+    if (typeof elapsedMs !== 'number' || !Number.isFinite(elapsedMs) || elapsedMs <= 0) {
+      return;
+    }
+    const now = Date.now();
+    if (now - this.lastPositionReportAt < POSITION_REPORT_INTERVAL_MS) {
+      return;
+    }
+    this.lastPositionReportAt = now;
+    this.ports.outputHandlers.onOutputState(this.zoneId, { position: elapsedMs / 1000 });
   }
 
   private async maybeResyncGroup(source: 'group_change'): Promise<void> {

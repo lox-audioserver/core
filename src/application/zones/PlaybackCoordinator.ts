@@ -65,6 +65,17 @@ type PlaybackCoordinatorDeps = {
   zoneAudioPrefs: ZoneAudioPreferences;
 };
 
+/**
+ * What to assume a room is holding when its output cannot say.
+ *
+ * Most renderers buffer somewhere between half a second and two. Guessing high is nearly
+ * free — the extra wait falls while the previous audio is still sounding — where guessing
+ * zero is the assumption that cannot be recovered from.
+ */
+const UNKNOWN_OUTPUT_LAG_MS = 1000;
+/** How long a measured playout lag stays worth using. */
+const PLAYOUT_LAG_MAX_AGE_MS = 30_000;
+
 export class PlaybackCoordinator {
   private readonly zoneRepo: ZoneRepository;
   private readonly queueController: ZoneQueueController;
@@ -575,6 +586,29 @@ export class PlaybackCoordinator {
    */
   public getOutputLatencyMs(ctx: ZoneContext): number {
     return this.computeOutputLatencyMs(this.resolvePlaybackOutputs(ctx));
+  }
+
+  /**
+   * How far behind the server this zone's room is, in ms.
+   *
+   * Asked three ways, because no single one covers every output: what the output states
+   * about itself, what it last revealed by reporting its own playback position, and — when
+   * it says nothing either way — a conservative assumption. Taking silence for "no buffer"
+   * is what let a doorbell raise the volume while the room was still on the outgoing track
+   * (#359), so the unknown case errs towards waiting.
+   */
+  public getRoomLagMs(ctx: ZoneContext): number {
+    const reportedMs = Math.max(0, this.getOutputLatencyMs(ctx));
+
+    let measuredMs = 0;
+    const measuredAt = ctx.outputPlayoutLagAt ?? 0;
+    if (measuredAt > 0 && Date.now() - measuredAt <= PLAYOUT_LAG_MAX_AGE_MS) {
+      const value = ctx.outputPlayoutLagMs;
+      measuredMs = typeof value === 'number' && Number.isFinite(value) ? Math.max(0, value) : 0;
+    }
+
+    const known = Math.max(reportedMs, measuredMs);
+    return known > 0 ? Math.round(known) : UNKNOWN_OUTPUT_LAG_MS;
   }
 
   private computeOutputLatencyMs(outputs: ZoneOutput[]): number {

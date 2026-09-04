@@ -766,7 +766,7 @@ export class ZoneManager {
       const rawWakeUp = this.powerManager.isSignalOn(zoneId)
         ? 0
         : (this.zoneAudioPrefs.getPlaybackPreDelayMs(zoneId) ?? 0);
-      const rawLatency = this.playbackCoordinator.getOutputLatencyMs(ctx);
+      const rawLatency = this.playbackCoordinator.getRoomLagMs(ctx);
       leads.push({
         zoneId,
         wakeUpMs: Number.isFinite(rawWakeUp) ? Math.max(0, Math.round(rawWakeUp)) : 0,

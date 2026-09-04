@@ -91,6 +91,11 @@ export function updateOutputState(args: {
   }
   // Ignore output-provided position ticks; the player already drives timing,
   // and accepting external time updates can create feedback loops and noisy broadcasts.
+  // They are still worth reading for one thing: where the output says it is, against
+  // where the server is, measures how much audio is in flight to that room. Only a few
+  // outputs can state a buffer figure up front (`getLatencyMs`), so the ones that report
+  // a position answer the same question from the other end (#359).
+  recordPlayoutLag(ctx, state.status, state.position);
   if (state.status === 'paused') {
     patch.mode = 'pause';
     patch.clientState = 'on';
@@ -103,4 +108,40 @@ export function updateOutputState(args: {
   if (Object.keys(patch).length > 0) {
     coordinator.applyPatch(zoneId, patch);
   }
+}
+
+/** Longest lag worth believing; anything beyond this is a stale or mismatched report. */
+const MAX_PLAYOUT_LAG_MS = 10_000;
+
+/**
+ * Measure how far the room is behind the server from an output's own position report.
+ *
+ * Both clocks count the same track from its start, so the difference is the audio the
+ * output is still holding. Kept deliberately blunt: a single most-recent reading, no
+ * smoothing, because it is used to decide when an alert becomes audible and a stale
+ * value is caught by its timestamp rather than averaged into the next one.
+ */
+function recordPlayoutLag(
+  ctx: ZoneContext,
+  status: 'playing' | 'paused' | 'stopped' | undefined,
+  position: number | undefined,
+): void {
+  // A report with no status at all is one sent purely to be measured; the player's own
+  // mode below is what decides whether it means anything.
+  if ((status !== undefined && status !== 'playing') || typeof position !== 'number' || !Number.isFinite(position)) {
+    return;
+  }
+  const playerState = ctx.player.getState();
+  if (playerState.mode !== 'playing' || typeof playerState.time !== 'number') {
+    return;
+  }
+  const lagMs = Math.round((playerState.time - position) * 1000);
+  if (lagMs < 0 || lagMs > MAX_PLAYOUT_LAG_MS) {
+    // A negative gap means the output is ahead of our own clock, which only happens
+    // when the two are not on the same track (a queue advance, a seek); either way
+    // there is nothing to learn from it.
+    return;
+  }
+  ctx.outputPlayoutLagMs = lagMs;
+  ctx.outputPlayoutLagAt = Date.now();
 }

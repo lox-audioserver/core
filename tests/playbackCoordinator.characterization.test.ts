@@ -972,6 +972,50 @@ test('output URI mismatch is ignored before first audio chunk for local queue', 
   assert.equal(patches[1]?.patch.qid, 'id-2');
 });
 
+test('an output that reports its position reveals how far the room is behind (#359)', () => {
+  // Only a few outputs can state a buffer figure up front. The ones that report where
+  // they are answer the same question from the other end: the gap to the server's clock
+  // is the audio still in flight to that room.
+  const { coordinator, ctx } = createHarness();
+  const player = ctx.player as unknown as FakePlayer;
+  player.state.mode = 'playing';
+  (player.state as { time?: number }).time = 12.5;
+
+  coordinator.updateOutputState(ctx.id, { status: 'playing', position: 11.7 });
+
+  assert.equal(ctx.outputPlayoutLagMs, 800);
+  assert.equal(coordinator.getRoomLagMs(ctx), 800);
+});
+
+test('a position that is not from the track we are playing is ignored (#359)', () => {
+  // An output that reports itself ahead of our own clock is on another track — a queue
+  // advance, a seek. There is nothing to learn from the gap, and taking it would park a
+  // nonsense lag on the zone.
+  const { coordinator, ctx } = createHarness();
+  const player = ctx.player as unknown as FakePlayer;
+  player.state.mode = 'playing';
+  (player.state as { time?: number }).time = 3;
+
+  coordinator.updateOutputState(ctx.id, { status: 'playing', position: 41 });
+
+  assert.equal(ctx.outputPlayoutLagMs, undefined);
+});
+
+test('an output that says nothing is assumed to be holding a buffer, not none (#359)', () => {
+  // Reading silence as "instantaneous" is the assumption that cannot be recovered from:
+  // it is what let a doorbell raise the volume while the room was still on the old track.
+  const { coordinator, ctx } = createHarness();
+  assert.equal(coordinator.getRoomLagMs(ctx), 1000);
+});
+
+test('a stale playout measurement falls back to the assumption (#359)', () => {
+  const { coordinator, ctx } = createHarness();
+  ctx.outputPlayoutLagMs = 250;
+  ctx.outputPlayoutLagAt = Date.now() - 60_000;
+
+  assert.equal(coordinator.getRoomLagMs(ctx), 1000);
+});
+
 test('a stopped output does not wind the queue back onto the track that finished', () => {
   // The engine session of a track that has ended is torn down after the queue has already moved
   // on, and it reports itself stopped with that track's uri. Read as "this is the current entry",

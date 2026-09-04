@@ -74,6 +74,18 @@ export interface ZoneContext {
   outputs: ZoneOutput[];
   player: ZonePlayer;
   outputTimingActive: boolean;
+  /**
+   * How far this zone's room is behind the server, in ms, measured from what the
+   * output last reported about its own playback position.
+   *
+   * Only some outputs can state a buffer figure up front, so the ones that report
+   * where they are are asked the same question the other way round: the gap between
+   * the server's clock and theirs is the audio still in flight. Undefined until an
+   * output has said something recent enough to trust.
+   */
+  outputPlayoutLagMs?: number;
+  /** When `outputPlayoutLagMs` was last measured (epoch ms). */
+  outputPlayoutLagAt?: number;
   lastOutputTimingAt: number;
   /**
    * Throttle zone state broadcasts so Loxone clients aren't hammered.

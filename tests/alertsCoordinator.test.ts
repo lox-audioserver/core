@@ -411,7 +411,7 @@ test('the announcement volume waits for the alert to be audible (#359)', async (
       },
       alignOutputFormat: () => {},
       applyOutputEndGuard: () => {},
-      getOutputLatencyMs: () => 600,
+      getRoomLagMs: () => 600,
     } as any,
     applyPatch: (_zoneId, patch) => {
       ctx.state = { ...ctx.state, ...(patch as Record<string, unknown>) };
@@ -482,7 +482,7 @@ test('a stopped alert does not get its volume applied afterwards (#359)', async 
     name: zone.name,
     sourceMac: zone.sourceMac,
     config: zone,
-    state: { ...buildInitialState(zone), mode: 'stop', volume: 20 },
+    state: { ...buildInitialState(zone), mode: 'play', volume: 20 },
     queue: { items: [], shuffle: false, repeat: 0, currentIndex: 0, authority: 'local' },
     queueController: { setItems: () => {}, currentIndex: () => 0, current: () => null },
     inputAdapter: {},
@@ -517,7 +517,7 @@ test('a stopped alert does not get its volume applied afterwards (#359)', async 
       },
       alignOutputFormat: () => {},
       applyOutputEndGuard: () => {},
-      getOutputLatencyMs: () => 800,
+      getRoomLagMs: () => 800,
     } as any,
     applyPatch: (_zoneId, patch) => {
       ctx.state = { ...ctx.state, ...(patch as Record<string, unknown>) };

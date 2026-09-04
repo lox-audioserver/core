@@ -212,7 +212,8 @@ export class AlertsCoordinator {
     // music blast at announcement level before the bell arrived (#359), so the level waits
     // out the lead and lands with the alert's first audible sample.
     const volumeDelayMs = Math.max(
-      this.resolveAudibleLeadMs(ctx, session) - ALERT_VOLUME_LEAD_MARGIN_MS,
+      this.resolveAudibleLeadMs(ctx, session, snapshot.mode === 'play') -
+        ALERT_VOLUME_LEAD_MARGIN_MS,
       0,
     );
     this.scheduleAlertVolume(ctx, alertRecord, clampedVolume, volumeDelayMs);
@@ -251,20 +252,36 @@ export class AlertsCoordinator {
 
   /**
    * How long after `playUri` the alert's first sample actually reaches the room:
-   * the silence the engine prepended to this very stream, plus the buffer the
-   * output is holding. Read off the running session rather than re-derived, so it
-   * can never disagree with what is playing.
+   * the silence the engine prepended to this very stream, plus the audio the output
+   * is still holding. The silence is read off the running session rather than
+   * re-derived, so it can never disagree with what is playing.
+   *
+   * `wasPlaying` decides whether the buffer matters at all. What the wait protects is
+   * the *previous* source — a zone that was stopped or paused has nothing in flight to
+   * be blasted, and making its bell wait would only risk the opposite fault.
    */
-  private resolveAudibleLeadMs(ctx: ZoneContext, session: PlaybackSession | null): number {
+  private resolveAudibleLeadMs(
+    ctx: ZoneContext,
+    session: PlaybackSession | null,
+    wasPlaying: boolean,
+  ): number {
     const preDelayMs = resolveSessionPreDelayMs(session);
-    let outputLatencyMs = 0;
-    try {
-      outputLatencyMs = this.playbackCoordinator.getOutputLatencyMs(ctx);
-    } catch {
-      // Latency is an optimisation; a failure here must not cost the alert its volume.
+    if (!wasPlaying) {
+      return preDelayMs > 0 ? Math.round(preDelayMs) : 0;
     }
-    const total = preDelayMs + (Number.isFinite(outputLatencyMs) ? outputLatencyMs : 0);
+    const total = preDelayMs + this.resolveOutputLagMs(ctx);
     return total > 0 ? Math.round(total) : 0;
+  }
+
+  /** How far behind the server this zone's room is; the coordinator owns the answer. */
+  private resolveOutputLagMs(ctx: ZoneContext): number {
+    try {
+      const value = this.playbackCoordinator.getRoomLagMs(ctx);
+      return Number.isFinite(value) ? Math.max(0, value) : 0;
+    } catch {
+      // Best-effort; a failure here must not cost the alert its volume.
+      return 0;
+    }
   }
 
   /** Put the room at the announcement level, waiting `delayMs` for the alert to be audible. */
