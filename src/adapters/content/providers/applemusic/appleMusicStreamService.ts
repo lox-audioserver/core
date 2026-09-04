@@ -2,7 +2,7 @@ import { createLogger } from '@/shared/logging/logger';
 import { safeReadText } from '@/shared/bestEffort';
 import type { ConfigPort } from '@/ports/ConfigPort';
 import type { StreamingServiceConfig } from '@/domain/config/types';
-import type { PlaybackSource } from '@/application/playback/audioManager';
+import type { PlaybackSource } from '@/ports/EngineTypes';
 import { decodeAudiopath, parseServiceNativeAudiopath } from '@/domain/zones/audiopath';
 import { slugFromBridgeId } from '@/domain/media/serviceIdentity';
 import Widevine, { LicenseType as WvLicenseType } from 'widevine';

@@ -7,7 +7,6 @@ import type {
   PlaybackSource,
   OutputProfile,
 } from '@/ports/EngineTypes';
-export type { PlaybackSource, OutputProfile } from '@/ports/EngineTypes';
 import { resolvePlaybackSource } from '@/application/playback/sourceResolver';
 import { resolveSourcePreDelayMs } from '@/application/playback/playbackPreDelay';
 import { decodeAudiopath } from '@/domain/zones/audiopath';
@@ -29,12 +28,6 @@ export type DeclaredFileFormat = {
 
 import { toEngineInputSpec } from '@/ports/playbackSourceMapping';
 import type {
-  PlaybackMetadata,
-  AudioStreamHandle,
-  CoverArtPayload,
-  PlaybackSession,
-} from '@/ports/types/playback';
-export type {
   PlaybackMetadata,
   AudioStreamHandle,
   CoverArtPayload,

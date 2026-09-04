@@ -1,6 +1,6 @@
 import { createLogger } from '@/shared/logging/logger';
 import { bestEffort } from '@/shared/bestEffort';
-import type { PlaybackSession } from '@/application/playback/audioManager';
+import type { PlaybackSession } from '@/ports/types/playback';
 import type { OutputConfigDefinition, ZoneOutput } from '@/ports/OutputsTypes';
 import { buildBaseUrl } from '@/shared/streamUrl';
 import {

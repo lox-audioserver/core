@@ -1,11 +1,10 @@
 import type { ComponentLogger } from '@/shared/logging/logger';
-import type { PlaybackMetadata } from '@/application/playback/audioManager';
 import type { ZoneAudioPreferences } from '@/application/playback/ZoneAudioPreferences';
 import type { AlertMediaResource } from '@/application/alerts/types';
 import type { ZoneState } from '@/domain/zones/zoneState';
 import type { AlertSnapshot, ZoneContext } from '@/application/zones/internal/zoneTypes';
 import type { ConfigPort } from '@/ports/ConfigPort';
-import type { PlaybackSession } from '@/ports/types/playback';
+import type { PlaybackMetadata, PlaybackSession } from '@/ports/types/playback';
 import type { NativeAlertRequest, ZoneOutput } from '@/ports/OutputsTypes';
 import { AudioType } from '@/domain/zones/enums';
 import { cloneQueueState, clampVolumeForZone } from '@/application/zones/helpers/stateHelpers';

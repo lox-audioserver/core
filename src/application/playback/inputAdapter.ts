@@ -1,4 +1,5 @@
-import type { PlaybackMetadata, PlaybackSource, CoverArtPayload } from '@/application/playback/audioManager';
+import type { PlaybackSource } from '@/ports/EngineTypes';
+import type { CoverArtPayload, PlaybackMetadata } from '@/ports/types/playback';
 import type { ZonePlayer } from '@/application/playback/zonePlayer';
 import type { QueueItem } from '@/application/zones/zoneManager';
 import { normalizeSpotifyAudiopath, createQueueItem } from '@/application/zones/helpers/queueHelpers';

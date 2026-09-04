@@ -1,4 +1,4 @@
-import type { PlaybackMetadata } from '@/application/playback/audioManager';
+import type { PlaybackMetadata } from '@/ports/types/playback';
 import type { QueueAuthority, ZoneContext } from '@/application/zones/internal/zoneTypes';
 import type { ParentContext } from '@/application/zones/policies/ParentContextPolicy';
 import type { ZoneState } from '@/domain/zones/zoneState';

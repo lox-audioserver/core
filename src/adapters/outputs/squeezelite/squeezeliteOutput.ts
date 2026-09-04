@@ -1,7 +1,7 @@
 import { createLogger } from '@/shared/logging/logger';
 import { resolveSessionCover } from '@/shared/coverArt';
 import { buildBaseUrl, resolveAbsoluteUrl, resolveStreamUrl, ensureQueryParam } from '@/shared/streamUrl';
-import type { PlaybackSession } from '@/application/playback/audioManager';
+import type { PlaybackSession } from '@/ports/types/playback';
 import type { HttpPreferences, OutputConfigDefinition, ZoneOutput } from '@/ports/OutputsTypes';
 import type { OutputPorts } from '@/adapters/outputs/outputPorts';
 import type { SlimClient, SlimEvent } from '@sonn-audio/node-slimproto';

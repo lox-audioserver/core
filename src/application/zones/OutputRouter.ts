@@ -1,5 +1,6 @@
 import type { ComponentLogger } from '@/shared/logging/logger';
-import type { AudioManager, PlaybackSession } from '@/application/playback/audioManager';
+import type { AudioManager } from '@/application/playback/audioManager';
+import type { PlaybackSession } from '@/ports/types/playback';
 import type { ZoneOutput } from '@/ports/OutputsTypes';
 import {
   dispatchOutputs,

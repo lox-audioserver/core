@@ -6,7 +6,7 @@ import type {
   PreferredOutput,
   ZoneOutput,
 } from '@/ports/OutputsTypes';
-import type { PlaybackSession } from '@/application/playback/audioManager';
+import type { PlaybackSession } from '@/ports/types/playback';
 import type { ConfigPort } from '@/ports/ConfigPort';
 import { buildBaseUrl, resolveStreamUrl } from '@/shared/streamUrl';
 import {

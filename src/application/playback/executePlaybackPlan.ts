@@ -1,4 +1,5 @@
-import type { PlaybackMetadata, PlaybackSession, PlaybackSource } from '@/application/playback/audioManager';
+import type { PlaybackSource } from '@/ports/EngineTypes';
+import type { PlaybackMetadata, PlaybackSession } from '@/ports/types/playback';
 import type { ZoneAudioPreferences } from '@/application/playback/ZoneAudioPreferences';
 import { applyPreferredPlaybackSettings } from '@/application/playback/PlaybackSettingsApplier';
 import type { PlaybackPlan } from '@/application/playback/types/PlaybackPlan';

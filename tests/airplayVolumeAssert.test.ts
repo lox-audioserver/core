@@ -3,7 +3,7 @@ import { PassThrough } from 'node:stream';
 import { test } from './testHarness';
 import { AirPlayOutput } from '../src/adapters/outputs/airplay/airplayOutput';
 import type { ConfigPort } from '../src/ports/ConfigPort';
-import type { PlaybackSession } from '../src/application/playback/audioManager';
+import type { PlaybackSession } from '../src/ports/types/playback';
 import { makeOutputPortsFake } from './fakes/outputPorts';
 
 function makeConfigPortStub(): ConfigPort {

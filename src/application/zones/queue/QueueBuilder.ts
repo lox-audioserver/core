@@ -1,4 +1,4 @@
-import type { PlaybackMetadata } from '@/application/playback/audioManager';
+import type { PlaybackMetadata } from '@/ports/types/playback';
 import { createQueueItem, normalizeSpotifyAudiopath, sanitizeStation } from '@/application/zones/helpers/queueHelpers';
 import { clamp } from '@/application/zones/helpers/stateHelpers';
 import type { QueueItem } from '@/ports/types/queueTypes';

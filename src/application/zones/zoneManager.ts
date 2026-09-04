@@ -4,11 +4,7 @@ import type { ZoneConfig, InputConfig, GroupConfig } from '@/domain/config/types
 import type { ZoneState } from '@/domain/zones/zoneState';
 import type { NotifierPort } from '@/ports/NotifierPort';
 import type { ContentPort } from '@/ports/ContentPort';
-import {
-  type AudioManager,
-  type PlaybackMetadata,
-  type PlaybackSession,
-} from '@/application/playback/audioManager';
+import type { AudioManager } from '@/application/playback/audioManager';
 import type { ZoneAudioPreferences } from '@/application/playback/ZoneAudioPreferences';
 import { ZonePlayer } from '@/application/playback/zonePlayer';
 import { PlaybackQueueNavigator } from '@/application/playback/PlaybackQueueNavigator';
@@ -26,7 +22,7 @@ import { getGroupByZone } from '@/application/groups/groupTracker';
 import type { OutputsPort } from '@/ports/OutputsPort';
 import type { OutputSyncStatus, ZoneOutput } from '@/ports/OutputsTypes';
 import type { InputsPort } from '@/ports/InputsPort';
-import type { PlaybackErrorOrigin } from '@/ports/types/playback';
+import type { PlaybackErrorOrigin, PlaybackMetadata, PlaybackSession } from '@/ports/types/playback';
 import type {
   QueueItem,
   QueueState,

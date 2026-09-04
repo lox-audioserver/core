@@ -21,11 +21,12 @@ import type { ContentPort } from '../src/ports/ContentPort';
 import type { NotifierPort } from '../src/ports/NotifierPort';
 import type { ConfigPort } from '../src/ports/ConfigPort';
 import type { ZoneOutput } from '../src/ports/OutputsTypes';
-import type { PlaybackMetadata, PlaybackSession, PlaybackSource, CoverArtPayload } from '../src/application/playback/audioManager';
+import type { AudioManager } from '../src/application/playback/audioManager';
+import type { PlaybackSource } from '../src/ports/EngineTypes';
+import type { CoverArtPayload, PlaybackMetadata, PlaybackSession } from '../src/ports/types/playback';
 import type { OutputRouter } from '../src/application/zones/OutputRouter';
 import type { ZoneAudioHelpers } from '../src/application/zones/internal/zoneAudioHelpers';
 import type { RecentsManager } from '../src/application/zones/recents/recentsManager';
-import type { AudioManager } from '../src/application/playback/audioManager';
 import type { ComponentLogger } from '../src/shared/logging/logger';
 
 const baseConfig: AudioServerConfig = {

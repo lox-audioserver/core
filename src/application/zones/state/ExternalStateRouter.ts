@@ -1,6 +1,7 @@
 import type { ComponentLogger } from '@/shared/logging/logger';
 import type { ZoneState } from '@/domain/zones/zoneState';
-import type { AudioManager, PlaybackSession } from '@/application/playback/audioManager';
+import type { AudioManager } from '@/application/playback/audioManager';
+import type { PlaybackSession } from '@/ports/types/playback';
 import type { ZoneRepository } from '@/application/zones/ZoneRepository';
 import type { QueueItem } from '@/application/zones/internal/zoneTypes';
 import { resolveZoneStateControllerId } from '@/application/zones/state/authorityPolicies';

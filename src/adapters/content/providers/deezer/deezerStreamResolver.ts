@@ -1,6 +1,6 @@
 import type { StreamProvider } from '@/adapters/content/StreamProvider';
 import { createLogger } from '@/shared/logging/logger';
-import type { PlaybackSource } from '@/application/playback/audioManager';
+import type { PlaybackSource } from '@/ports/EngineTypes';
 import type { DeezerStreamService } from '@/adapters/content/providers/deezer/deezerStreamService';
 
 export class DeezerStreamResolver implements StreamProvider {

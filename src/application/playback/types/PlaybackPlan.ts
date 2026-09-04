@@ -1,4 +1,4 @@
-import type { PlaybackMetadata } from '@/application/playback/audioManager';
+import type { PlaybackMetadata } from '@/ports/types/playback';
 import type { PreferredPlaybackSettings } from '@/application/playback/policies/OutputFormatPolicy';
 
 export type PlaybackKind = 'queue' | 'live-input' | 'provider-stream';

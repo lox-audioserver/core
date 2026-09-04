@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from './testHarness';
-import { AudioManager, type PlaybackSource } from '../src/application/playback/audioManager';
+import { AudioManager } from '../src/application/playback/audioManager';
 import { ZoneAudioPreferences } from '../src/application/playback/ZoneAudioPreferences';
 import { PlaybackService } from '../src/application/playback/PlaybackService';
 import type { EnginePort, EngineSessionStats } from '../src/ports/EnginePort';
-import type { EngineStartOptions } from '../src/ports/EngineTypes';
+import type { EngineStartOptions, PlaybackSource } from '../src/ports/EngineTypes';
 import type { SessionKey } from '../src/ports/types/SessionKey';
 
 // Issue #345: an output that drops its HTTP connection while paused (Sonos always does) leaves

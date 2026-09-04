@@ -1,4 +1,5 @@
-import type { PlaybackMetadata, PlaybackSource, CoverArtPayload } from '@/application/playback/audioManager';
+import type { PlaybackSource } from '@/ports/EngineTypes';
+import type { CoverArtPayload, PlaybackMetadata } from '@/ports/types/playback';
 import type { InputAdapter } from '@/application/playback/inputAdapter';
 import type { InputPlaybackController } from '@/ports/InputsPort';
 

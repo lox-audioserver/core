@@ -1,6 +1,6 @@
 import { Jimp, JimpMime } from 'jimp';
 import { createLogger } from '@/shared/logging/logger';
-import type { PlaybackSession } from '@/application/playback/audioManager';
+import type { PlaybackSession } from '@/ports/types/playback';
 import {
   audioOutputSettings,
   pcmBitDepthFromFormat,

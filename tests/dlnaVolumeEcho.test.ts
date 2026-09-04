@@ -3,7 +3,7 @@ import { test } from './testHarness';
 import { DlnaOutput } from '../src/adapters/outputs/dlna/dlnaOutput';
 import type { ConfigPort } from '../src/ports/ConfigPort';
 import type { OutputPorts } from '../src/adapters/outputs/outputPorts';
-import type { PlaybackSession } from '../src/application/playback/audioManager';
+import type { PlaybackSession } from '../src/ports/types/playback';
 import { makeOutputPortsFake } from './fakes/outputPorts';
 
 /**

@@ -1,4 +1,4 @@
-import type { PlaybackSession } from '@/application/playback/audioManager';
+import type { PlaybackSession } from '@/ports/types/playback';
 import type { ZoneOutput } from '@/ports/OutputsTypes';
 import type { ZoneContext } from '@/application/zones/zoneManager';
 import type { ComponentLogger } from '@/shared/logging/logger';

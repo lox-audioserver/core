@@ -1,4 +1,4 @@
-import type { PlaybackMetadata, PlaybackSession } from '@/application/playback/audioManager';
+import type { PlaybackMetadata, PlaybackSession } from '@/ports/types/playback';
 import type { ZoneAudioHelpers } from '@/application/zones/internal/zoneAudioHelpers';
 import type { ZoneContext } from '@/application/zones/internal/zoneTypes';
 import { clampVolumeForZone, getZoneDefaultVolume } from '@/application/zones/helpers/stateHelpers';

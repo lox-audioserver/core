@@ -1,6 +1,6 @@
 import type { StreamProvider } from '@/adapters/content/StreamProvider';
 import { createLogger } from '@/shared/logging/logger';
-import type { PlaybackSource } from '@/application/playback/audioManager';
+import type { PlaybackSource } from '@/ports/EngineTypes';
 import type { TidalStreamService } from '@/adapters/content/providers/tidal/tidalStreamService';
 
 export class TidalStreamResolver implements StreamProvider {

@@ -1,6 +1,7 @@
 import { createLogger, type ComponentLogger } from '@/shared/logging/logger';
 import type { ZoneAirplayConfig } from '@/domain/config/types';
-import type { PlaybackMetadata, PlaybackSource, CoverArtPayload } from '@/application/playback/audioManager';
+import type { PlaybackSource } from '@/ports/EngineTypes';
+import type { CoverArtPayload, PlaybackMetadata } from '@/ports/types/playback';
 import type { PlayerRegistryPort } from '@/ports/PlayerRegistryPort';
 import type { MdnsBrowser, MdnsPort, MdnsRegistration } from '@/ports/MdnsPort';
 import { advertisableIpv4Addresses } from '@/shared/utils/net';

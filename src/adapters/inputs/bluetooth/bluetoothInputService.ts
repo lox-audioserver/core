@@ -3,7 +3,7 @@ import { createLogger } from '@/shared/logging/logger';
 import type { ZoneConfig } from '@/domain/config/types';
 import type { AirplayInstanceController } from '@/adapters/inputs/airplay/airplayInstance';
 import type { SendspinHookRegistryPort } from '@/adapters/outputs/sendspin/sendspinHookRegistry';
-import type { PlaybackMetadata } from '@/application/playback/audioManager';
+import type { PlaybackMetadata } from '@/ports/types/playback';
 import { sendspinCore, SourceCommand } from '@sonn-audio/node-sendspin';
 import type { SendspinSourceStreamFormat } from '@sonn-audio/node-sendspin';
 

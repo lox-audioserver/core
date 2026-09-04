@@ -1,6 +1,6 @@
 import { createLogger } from '@/shared/logging/logger';
 import type { PassThrough } from 'node:stream';
-import type { PlaybackSession } from '@/application/playback/audioManager';
+import type { PlaybackSession } from '@/ports/types/playback';
 import { zoneSessionKey } from '@/ports/types/SessionKey';
 import type { PreferredOutput, OutputConfigDefinition, ZoneOutput } from '@/ports/OutputsTypes';
 import { Ap2Sender, computeGroupAnchorNtp } from '@/adapters/outputs/airplay/ap2Sender';

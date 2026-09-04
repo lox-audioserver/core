@@ -1,4 +1,4 @@
-import type { PlaybackMetadata } from '@/application/playback/audioManager';
+import type { PlaybackMetadata } from '@/ports/types/playback';
 import type { ContentPort } from '@/ports/ContentPort';
 import type { ContentItemMetadata } from '@/ports/ContentTypes';
 import type { ParentContext } from '@/application/zones/policies/ParentContextPolicy';

@@ -1,7 +1,7 @@
 import { createLogger } from '@/shared/logging/logger';
 import { bestEffort } from '@/shared/bestEffort';
 import type { GlobalSpotifyConfig, ZoneConfig } from '@/domain/config/types';
-import type { PlaybackSource } from '@/application/playback/audioManager';
+import type { PlaybackSource } from '@/ports/EngineTypes';
 import type { SpotifyConnectController } from '@/ports/InputsPort';
 import type { ConfigPort } from '@/ports/ConfigPort';
 import { SoloistPlaybackService } from '@/adapters/inputs/spotify/soloist/soloistPlaybackService';

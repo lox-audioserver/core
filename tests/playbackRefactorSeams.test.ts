@@ -4,7 +4,7 @@ import { parseParentContext } from '../src/application/zones/policies/ParentCont
 import { classifyIsRadio } from '../src/application/zones/policies/RadioClassificationPolicy';
 import { buildQueueForRequest } from '../src/application/zones/queue/QueueBuilder';
 import { buildPlaybackPlan } from '../src/application/playback/buildPlaybackPlan';
-import type { PlaybackMetadata } from '../src/application/playback/audioManager';
+import type { PlaybackMetadata } from '../src/ports/types/playback';
 import type { ContentPort } from '../src/ports/ContentPort';
 import type { ZoneAudioHelpers } from '../src/application/zones/internal/zoneAudioHelpers';
 import type { QueueController as ZoneQueueController } from '../src/application/zones/QueueController';

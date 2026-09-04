@@ -1,4 +1,4 @@
-import type { PlaybackSource } from '@/application/playback/audioManager';
+import type { PlaybackSource } from '@/ports/EngineTypes';
 
 /**
  * A service that can turn one of its own audiopaths into something playable.

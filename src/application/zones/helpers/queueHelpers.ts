@@ -1,5 +1,5 @@
 import { inferAudiotype, parseServiceNativeAudiopath } from '@/domain/zones/audiopath';
-import type { PlaybackMetadata } from '@/application/playback/audioManager';
+import type { PlaybackMetadata } from '@/ports/types/playback';
 import type { ContentFolderItem } from '@/ports/ContentTypes';
 
 export function normalizeSpotifyAudiopath(value: string): string {

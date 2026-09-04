@@ -1,4 +1,4 @@
-import type { PlaybackMetadata } from '@/application/playback/audioManager';
+import type { PlaybackMetadata } from '@/ports/types/playback';
 import { decodeAudiopath } from '@/domain/zones/audiopath';
 import { isRadioAudiopath } from '@/application/zones/internal/zoneAudioHelpers';
 

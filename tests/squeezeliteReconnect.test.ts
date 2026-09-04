@@ -3,7 +3,7 @@ import { test } from './testHarness';
 import { SqueezeliteOutput } from '../src/adapters/outputs/squeezelite/squeezeliteOutput';
 import { EventType, PlayerState } from '@sonn-audio/node-slimproto';
 import type { OutputPorts } from '../src/adapters/outputs/outputPorts';
-import type { PlaybackSession } from '../src/application/playback/audioManager';
+import type { PlaybackSession } from '../src/ports/types/playback';
 
 // A squeezelite client that drops and comes back left the server streaming into a socket
 // nobody read: the session stayed alive, the zone still said `play`, and the returning

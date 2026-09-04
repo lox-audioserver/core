@@ -1,7 +1,8 @@
 import { createLogger } from '@/shared/logging/logger';
 import type { ConfigPort } from '@/ports/ConfigPort';
 import type { ZoneConfig } from '@/domain/config/types';
-import type { PlaybackSource, PlaybackMetadata } from '@/application/playback/audioManager';
+import type { PlaybackSource } from '@/ports/EngineTypes';
+import type { PlaybackMetadata } from '@/ports/types/playback';
 import type { QueueItem } from '@/ports/types/queueTypes';
 import { MusicAssistantApi } from '@/shared/musicassistant/musicAssistantApi';
 import { decodeAudiopath } from '@/domain/zones/audiopath';

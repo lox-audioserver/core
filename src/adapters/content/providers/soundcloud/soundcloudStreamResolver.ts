@@ -1,6 +1,6 @@
 import type { StreamProvider } from '@/adapters/content/StreamProvider';
 import { createLogger } from '@/shared/logging/logger';
-import type { PlaybackSource } from '@/application/playback/audioManager';
+import type { PlaybackSource } from '@/ports/EngineTypes';
 import type { SoundCloudStreamService } from '@/adapters/content/providers/soundcloud/soundcloudStreamService';
 
 export class SoundCloudStreamResolver implements StreamProvider {

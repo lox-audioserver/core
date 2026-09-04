@@ -1,4 +1,4 @@
-import type { PlaybackMetadata } from '@/application/playback/audioManager';
+import type { PlaybackMetadata } from '@/ports/types/playback';
 import type { ZoneAudioHelpers } from '@/application/zones/internal/zoneAudioHelpers';
 import type { ParentContext } from '@/application/zones/policies/ParentContextPolicy';
 import type { ResolvedPlayRequest } from '@/application/zones/playback/types';

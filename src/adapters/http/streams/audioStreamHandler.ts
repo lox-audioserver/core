@@ -1,7 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { PassThrough } from 'node:stream';
 import { createLogger } from '@/shared/logging/logger';
-import type { AudioManager, PlaybackSession } from '@/application/playback/audioManager';
+import type { AudioManager } from '@/application/playback/audioManager';
+import type { PlaybackSession } from '@/ports/types/playback';
 import type { ZoneAudioPreferences } from '@/application/playback/ZoneAudioPreferences';
 import type { EnginePort } from '@/ports/EnginePort';
 import type { OutputProfile } from '@/ports/EngineTypes';

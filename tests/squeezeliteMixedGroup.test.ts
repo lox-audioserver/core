@@ -5,7 +5,7 @@ import { createSqueezeliteGroupController } from '../src/application/outputs/squ
 import { getGroupByZone, removeGroupByLeader, upsertGroup } from '../src/application/groups/groupTracker';
 import { SqueezeliteOutput } from '../src/adapters/outputs/squeezelite/squeezeliteOutput';
 import type { OutputPorts } from '../src/adapters/outputs/outputPorts';
-import type { PlaybackSession } from '../src/application/playback/audioManager';
+import type { PlaybackSession } from '../src/ports/types/playback';
 
 // Grouping in squeezelite is leader-centric: members follow the leader's stream URL and
 // are unpaused against its clock. A mixed group has a leader on another protocol, so none

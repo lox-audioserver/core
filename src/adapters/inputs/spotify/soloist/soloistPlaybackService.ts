@@ -1,7 +1,8 @@
 import type { Readable } from 'node:stream';
 import { createLogger } from '@/shared/logging/logger';
 import type { ConfigPort } from '@/ports/ConfigPort';
-import type { PlaybackSource } from '@/application/playback/audioManager';
+import type { PlaybackSource } from '@/ports/EngineTypes';
+import type { PlaybackMetadata } from '@/ports/types/playback';
 import { PulseSoundCard } from '@/adapters/inputs/pulse/pulseSoundCard';
 import {
   accountStore,
@@ -28,7 +29,6 @@ import {
   type SoloistStateEvent,
 } from '@/adapters/inputs/spotify/soloist/soloistWsClient';
 import type { SpotifyConnectController, SpotifyQueueTrack } from '@/ports/InputsPort';
-import type { PlaybackMetadata } from '@/application/playback/audioManager';
 
 /**
  * How often to ask Spotify whether it has published a new build.

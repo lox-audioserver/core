@@ -10,7 +10,7 @@ import type { RecentsManager } from '@/application/zones/recents/recentsManager'
 import type { FavoritesManager } from '@/application/zones/favorites/favoritesManager';
 import { decodeAudiopath } from '@/domain/zones/audiopath';
 import { isMusicAssistantAudiopath } from '@/application/zones/internal/zoneAudioHelpers';
-import type { PlaybackMetadata } from '@/application/playback/audioManager';
+import type { PlaybackMetadata } from '@/ports/types/playback';
 import { BASE_LIBRARY, BASE_PLAYLIST, decodeLoxoneId } from '@/adapters/loxone/commands/utils/loxoneIdCodec';
 import type { ZoneManagerFacade } from '@/application/zones/createZoneManager';
 import type { ConfigPort } from '@/ports/ConfigPort';

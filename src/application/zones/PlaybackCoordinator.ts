@@ -1,5 +1,6 @@
 import type { ComponentLogger } from '@/shared/logging/logger';
-import type { AudioManager, PlaybackMetadata, PlaybackSession, PlaybackSource, CoverArtPayload } from '@/application/playback/audioManager';
+import type { AudioManager } from '@/application/playback/audioManager';
+import type { PlaybackSource } from '@/ports/EngineTypes';
 import type { ZoneAudioPreferences } from '@/application/playback/ZoneAudioPreferences';
 import type { ZoneState } from '@/domain/zones/zoneState';
 import { toServiceNative } from '@/domain/zones/bridgeIdentity';
@@ -24,7 +25,7 @@ import {
 } from '@/application/zones/internal/musicAssistantProvider';
 import { ZoneRepository } from '@/application/zones/ZoneRepository';
 import type { ConfigPort } from '@/ports/ConfigPort';
-import type { PlaybackErrorOrigin } from '@/ports/types/playback';
+import type { CoverArtPayload, PlaybackErrorOrigin, PlaybackMetadata, PlaybackSession } from '@/ports/types/playback';
 import { attachPlayerListeners } from '@/application/zones/playback/playerListeners';
 import { handleZoneCommand } from '@/application/zones/playback/commandHandlers';
 import { QueueStepDispatcher } from '@/application/zones/playback/QueueStepDispatcher';

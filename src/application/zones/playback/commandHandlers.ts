@@ -11,7 +11,7 @@ import type { ComponentLogger } from '@/shared/logging/logger';
 import type { ZoneState } from '@/domain/zones/zoneState';
 import type { ZoneOutput } from '@/ports/OutputsTypes';
 import type { QueueAuthority } from '@/application/zones/internal/zoneTypes';
-import type { PlaybackMetadata, PlaybackSession } from '@/application/playback/audioManager';
+import type { PlaybackMetadata, PlaybackSession } from '@/ports/types/playback';
 import type { AirplayRemoteCommand, LineInControlCommand } from '@/ports/InputsPort';
 import { parseLineInInputId } from '@/application/zones/internal/zoneAudioHelpers';
 import type { ZoneAudioHelpers } from '@/application/zones/internal/zoneAudioHelpers';

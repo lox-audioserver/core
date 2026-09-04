@@ -1,4 +1,5 @@
-import type { PlaybackMetadata, PlaybackSession, PlaybackSource } from '@/application/playback/audioManager';
+import type { PlaybackSource } from '@/ports/EngineTypes';
+import type { PlaybackMetadata, PlaybackSession } from '@/ports/types/playback';
 
 export type PlayerMode = 'stopped' | 'playing' | 'paused';
 

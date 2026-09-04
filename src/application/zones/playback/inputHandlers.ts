@@ -1,4 +1,5 @@
-import type { PlaybackMetadata, PlaybackSource, CoverArtPayload } from '@/application/playback/audioManager';
+import type { PlaybackSource } from '@/ports/EngineTypes';
+import type { CoverArtPayload, PlaybackMetadata } from '@/ports/types/playback';
 import type { ZoneAudioHelpers } from '@/application/zones/internal/zoneAudioHelpers';
 import type { ZoneContext } from '@/application/zones/internal/zoneTypes';
 import { clampVolumeForZone } from '@/application/zones/helpers/stateHelpers';

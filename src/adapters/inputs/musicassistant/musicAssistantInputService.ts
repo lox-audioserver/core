@@ -1,7 +1,7 @@
 import { createLogger } from '@/shared/logging/logger';
 import type { ZoneConfig } from '@/domain/config/types';
 import type { PlaybackSource } from '@/ports/EngineTypes';
-import type { PlaybackMetadata } from '@/application/playback/audioManager';
+import type { PlaybackMetadata } from '@/ports/types/playback';
 import type { MusicAssistantInputHandlers, MusicAssistantSwitchAwayHandlers } from '@/ports/InputsPort';
 import type { MusicAssistantStreamService } from '@/adapters/inputs/musicassistant/musicAssistantStreamService';
 

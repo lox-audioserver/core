@@ -6,7 +6,7 @@ import {
   type StreamProfileChoice,
 } from '@/domain/outputs/streamProfilePolicy';
 import { createLogger } from '@/shared/logging/logger';
-import type { PlaybackSession } from '@/application/playback/audioManager';
+import type { PlaybackSession } from '@/ports/types/playback';
 import type { HttpPreferences, PreferredOutput, OutputConfigDefinition, ZoneOutput } from '@/ports/OutputsTypes';
 import { decodeAudiopath } from '@/domain/zones/audiopath';
 import { isHttpUrl, resolveSessionCover } from '@/shared/coverArt';

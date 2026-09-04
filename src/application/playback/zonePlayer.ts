@@ -1,11 +1,7 @@
 import { createLogger } from '@/shared/logging/logger';
-import {
-  type AudioManager,
-  type CoverArtPayload,
-  type PlaybackMetadata,
-  type PlaybackSession,
-  type PlaybackSource,
-} from '@/application/playback/audioManager';
+import type { AudioManager } from '@/application/playback/audioManager';
+import type { PlaybackSource } from '@/ports/EngineTypes';
+import type { CoverArtPayload, PlaybackMetadata, PlaybackSession } from '@/ports/types/playback';
 import { resolveSourcePreDelayMs } from '@/application/playback/playbackPreDelay';
 import type { PlayerEvent, PlayerEventMap, PlayerState } from '@/application/playback/types';
 

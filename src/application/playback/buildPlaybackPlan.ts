@@ -1,4 +1,4 @@
-import type { PlaybackMetadata } from '@/application/playback/audioManager';
+import type { PlaybackMetadata } from '@/ports/types/playback';
 import type { ZoneContext } from '@/application/zones/internal/zoneTypes';
 import type { PreferredPlaybackSettings } from '@/application/playback/policies/OutputFormatPolicy';
 import { detectServiceFromAudiopath } from '@/domain/zones/audiopath';

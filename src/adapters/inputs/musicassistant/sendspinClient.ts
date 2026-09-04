@@ -2,7 +2,7 @@ import { performance } from 'node:perf_hooks';
 import { PassThrough } from 'node:stream';
 import WebSocket from 'ws';
 import type { createLogger } from '@/shared/logging/logger';
-import type { PlaybackMetadata } from '@/application/playback/audioManager';
+import type { PlaybackMetadata } from '@/ports/types/playback';
 import { extractSendspinMetadata } from './maStreamMediaHelpers';
 
 export type StreamFormat = {

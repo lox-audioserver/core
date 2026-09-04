@@ -180,7 +180,7 @@ import type { ZoneConfig } from '../src/domain/config/types';
 import { applyZonePatch } from '../src/domain/zones/reducer';
 import type { ZoneState } from '../src/domain/zones/zoneState';
 import type { QueueItem } from '../src/ports/types/queueTypes';
-import type { PlaybackSession } from '../src/application/playback/audioManager';
+import type { PlaybackSession } from '../src/ports/types/playback';
 import { StorageAdapter } from '../src/adapters/storage/StorageAdapter';
 import type { AirplayGroupCoordinator } from '../src/application/outputs/airplayGroupController';
 import { makeOutputPortsFake, noopAirplayGroupController } from './fakes/outputPorts';

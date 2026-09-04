@@ -1,7 +1,7 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { createLogger } from '@/shared/logging/logger';
 import { safeReadText } from '@/shared/bestEffort';
-import type { PlaybackSession } from '@/application/playback/audioManager';
+import type { PlaybackSession } from '@/ports/types/playback';
 import type {
   HttpPreferences,
   NativeAlertRequest,

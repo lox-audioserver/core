@@ -1,5 +1,6 @@
 import type { ComponentLogger } from '@/shared/logging/logger';
-import type { AudioManager, PlaybackMetadata, PlaybackSession } from '@/application/playback/audioManager';
+import type { AudioManager } from '@/application/playback/audioManager';
+import type { PlaybackMetadata, PlaybackSession } from '@/ports/types/playback';
 import type { ZoneState } from '@/domain/zones/zoneState';
 import type { QueueAuthority, ZoneContext } from '@/application/zones/internal/zoneTypes';
 import type { ZoneOutput } from '@/ports/OutputsTypes';
