@@ -1,6 +1,7 @@
 import { createLogger } from '@/shared/logging/logger';
 import type { ContentManager } from '@/adapters/content/contentManager';
-import type { ContentFolder, ContentFolderItem, ContentItemMetadata, ContentItemKind } from '@/ports/ContentTypes';
+import type { ContentFolder, ContentFolderItem, ContentItemMetadata } from '@/ports/ContentTypes';
+import type { ContentItemKind } from '@/domain/media/contentKind';
 import { resolveItemKind } from '@/adapters/content/contentItemKind';
 import { audioOutputSettings, mp3BitrateToBps } from '@/ports/types/audioFormat';
 import type { ContentProvider, BrowseResult, DidlContainer, DidlItem } from '@sonn-audio/node-upnp';

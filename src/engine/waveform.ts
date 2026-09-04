@@ -18,7 +18,7 @@
  */
 import { spawn } from 'node:child_process';
 import { ffmpegBinary } from '@/engine/ffmpegProcess';
-import { ANALYSIS_DB_FLOOR } from '@/application/audio/audioAnalysisService';
+import { ANALYSIS_DB_FLOOR } from '@/domain/audio/analysisScale';
 import { createLogger } from '@/shared/logging/logger';
 
 const log = createLogger('Engine', 'Waveform');

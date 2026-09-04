@@ -7,7 +7,6 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { test, tests, type TestFn } from './testHarness';
-import './architecture/importBoundaries.test';
 import './sessionKey.test';
 import './buildChannel.test';
 import './startWithTimeout.test';

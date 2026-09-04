@@ -22,7 +22,7 @@
  * parsing, and `source.id` is documented as opaque — a scheme that looks structured gets
  * split on by a client sooner or later, and then we cannot change it.
  */
-import type { ContentItemKind } from '@/ports/ContentTypes';
+import type { ContentItemKind } from '@/domain/media/contentKind';
 
 /** Separator, chosen because it is outside the base64url alphabet (`A-Za-z0-9-_`). */
 const SEP = '.';

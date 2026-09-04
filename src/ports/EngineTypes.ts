@@ -222,3 +222,46 @@ export type EngineStartOptions = {
   /** Apply built-in 10-band EQ to all outputs in this start call. */
   equalizer?: EngineEqualizerSpec | null;
 };
+
+/**
+ * Every way this server can alter the audio, as data.
+ *
+ * The player's signal path used to be built from two booleans (`bitPerfect`, `dspApplied`), which is
+ * enough to say *whether* something happened and nothing about what — and "DSP applied" over a chain
+ * that might have resampled, requantised, gained, delayed, equalised or re-encoded is exactly the
+ * vagueness a technical readout exists to remove.
+ *
+ * Read straight off the `FilterStage[]` that produced the command line, so a stage cannot be described
+ * as absent while its filter is in the args, nor described with settings the running filter does not
+ * have. Anything added to `buildFilterChain` belongs here in the same commit.
+ */
+export interface ProcessingChain {
+  /** soxr engaged: rate, channel count or depth had to change (or a filter forced the path). */
+  resampled: boolean;
+  /** The resampler's own settings, when it ran. */
+  resampler: { name: string; precision: number; cutoff: number } | null;
+  /** Sample depth changed — the source declared one and the output carries another. */
+  requantised: boolean;
+  /** Channel count changed: a downmix or an upmix. */
+  channelsRemapped: boolean;
+  /** The output codec re-encodes rather than carrying samples (aac, mp3, opus). */
+  reencoded: boolean;
+  /** The zone's 10-band equalizer, when any band is off zero. */
+  equalizer: { bands: number[] } | null;
+  /**
+   * Gain in dB, split by where it comes from: the source's own loudness normalisation (Spotify sends
+   * one) and the output's fixed trim. `0` means untouched — this is not the zone's volume, which the
+   * player applies at the device and never here.
+   */
+  gainDb: { source: number; output: number } | null;
+  /** Pre-delay in ms, for aligning a source against another output. */
+  delayMs: number | null;
+  /** Dither method used at the final requantisation, or null when nothing lost width. */
+  dither: string | null;
+  /**
+   * Attenuation applied ahead of a boosting equalizer so it cannot clip, in dB (negative). Null when
+   * nothing needed it — a flat or cut-only curve, or a chain where the equalizer runs on ffmpeg's
+   * command line and no headroom is managed at all.
+   */
+  headroomDb: number | null;
+}

@@ -14,7 +14,8 @@
 import { isContainerKind, resolveItemKind } from '@/adapters/content/contentItemKind';
 import { encodeContainerRef, encodePlayableRef } from '@/domain/media/browseRef';
 import type { ApiBrowseItem, ApiItemKind } from '@/domain/zones/apiTypes';
-import type { ContentFolderItem, ContentItemKind } from '@/ports/ContentTypes';
+import type { ContentFolderItem } from '@/ports/ContentTypes';
+import type { ContentItemKind } from '@/domain/media/contentKind';
 
 /**
  * Every internal kind is a public kind of the same name, so this is a widening cast rather

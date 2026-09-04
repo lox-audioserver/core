@@ -13,7 +13,7 @@
  * uniform blob — it has to say which kinds it means — and a consumer can render exactly the
  * tabs that will return something.
  */
-import type { ContentItemKind } from '@/ports/ContentTypes';
+import type { ContentItemKind } from '@/domain/media/contentKind';
 
 /**
  * The kinds a provider can search for.

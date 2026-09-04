@@ -1,4 +1,5 @@
 import type { SpotifyAccountConfig as ConfigSpotifyAccountConfig } from '@/domain/config/types';
+import type { ContentItemKind } from '@/domain/media/contentKind';
 
 export interface ContentServiceAccount {
   id: string;
@@ -14,32 +15,6 @@ export interface ContentServiceEntry {
   icon: string;
   accounts?: ContentServiceAccount[];
 }
-
-/**
- * What a browsable item actually is, independent of any protocol.
- *
- * `ContentFolderItem.type` is a Loxone FileType: it says "file" or "folder" and
- * collapses album/artist/playlist onto the same number, so a consumer cannot tell
- * them apart. This is the neutral vocabulary every consumer can rely on — DLNA maps
- * it onto UPnP classes, the Loxone adapter keeps projecting `type`.
- *
- * Providers should set `kind` directly; {@link resolveItemKind} derives it from the
- * legacy `tag` string for those that don't yet.
- */
-export type ContentItemKind =
-  | 'track'
-  | 'album'
-  | 'artist'
-  | 'playlist'
-  /** A live stream (internet radio); playable, but not a fixed-length track. */
-  | 'radio'
-  /** A podcast/show container and its episodes. */
-  | 'show'
-  | 'episode'
-  /** A browse-only grouping (genres, moods, "browse" roots). */
-  | 'category'
-  /** Anything else browsable: storage folders, service roots, unknown containers. */
-  | 'folder';
 
 export interface ContentFolderItem {
   id: string;

@@ -1,4 +1,5 @@
-import type { ContentFolderItem, ContentItemKind } from '@/ports/ContentTypes';
+import type { ContentFolderItem } from '@/ports/ContentTypes';
+import type { ContentItemKind } from '@/domain/media/contentKind';
 
 /**
  * Resolves what a listing item actually is.

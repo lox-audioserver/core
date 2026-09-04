@@ -14,12 +14,11 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { createHash } from 'node:crypto';
 import type { ApiEventHub } from '@/adapters/http/api/apiEventHub';
-import {
-  ANALYSIS_DB_FLOOR,
-  ANALYSIS_FULL_SCALE,
-  type AudioAnalysisEvent,
-  type AudioAnalysisSubscription,
+import type {
+  AudioAnalysisEvent,
+  AudioAnalysisSubscription,
 } from '@/application/audio/audioAnalysisService';
+import { ANALYSIS_DB_FLOOR, ANALYSIS_FULL_SCALE } from '@/domain/audio/analysisScale';
 import { serverClockUs } from '@/shared/audio/serverClock';
 import { toApiZoneState } from '@/adapters/http/api/zoneProjection';
 import { resolveUriFromRef } from '@/domain/media/browseRef';

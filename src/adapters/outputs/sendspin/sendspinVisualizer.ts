@@ -11,7 +11,7 @@
  * extractor: loudness, spectrum, frequency peak, onset peak and pitch.
  */
 
-import { ANALYSIS_DB_FLOOR, ANALYSIS_FULL_SCALE } from '@/application/audio/audioAnalysisService';
+import { ANALYSIS_DB_FLOOR, ANALYSIS_FULL_SCALE } from '@/domain/audio/analysisScale';
 
 export type SpectrumScale = 'lin' | 'log' | 'mel';
 

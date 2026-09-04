@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from './testHarness';
 import { bucketsFromPcm, PROBE_RATE, WAVEFORM_BUCKETS } from '../src/engine/waveform';
-import { ANALYSIS_DB_FLOOR } from '../src/application/audio/audioAnalysisService';
+import { ANALYSIS_DB_FLOOR } from '../src/domain/audio/analysisScale';
 import { WaveformService, type WaveformStore } from '../src/application/audio/waveformService';
 
 /*

@@ -1,6 +1,11 @@
 import type { PassThrough } from 'node:stream';
-import type { ProcessingChain } from '@/engine/ffmpegArgs';
-import type { EngineHandoffSpec, EngineStartOptions, OutputProfile, PlaybackSource } from '@/ports/EngineTypes';
+import type {
+  EngineHandoffSpec,
+  EngineStartOptions,
+  OutputProfile,
+  PlaybackSource,
+  ProcessingChain,
+} from '@/ports/EngineTypes';
 import type { AudioOutputSettings } from '@/ports/types/audioFormat';
 import type { SessionKey } from '@/ports/types/SessionKey';
 
