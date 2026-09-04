@@ -1,4 +1,5 @@
 import type { SpotifyAccountConfig } from '@/domain/config/types';
+import type { ContentItemKind } from '@/domain/media/contentKind';
 import type {
   ContentFolder,
   ContentFolderItem,
@@ -158,6 +159,9 @@ interface SpotifyApiResult<T> {
 /**
  * Wraps Spotify API operations for a single configured account.
  */
+/** The kinds Spotify exposes a follow state for; see {@link SpotifyAccountProvider.followable}. */
+const FOLLOWABLE_KINDS = new Set<ContentItemKind>(['album', 'artist', 'playlist', 'show']);
+
 export class SpotifyAccountProvider implements ContentProvider {
   public readonly providerId: string;
   /** Service-native audiopath prefix; see SpotifyAccountProviderOptions. */
@@ -206,6 +210,22 @@ export class SpotifyAccountProvider implements ContentProvider {
 
   public get hasAuthError(): boolean {
     return this.authError;
+  }
+
+  /**
+   * Whether a row of this kind should offer a follow control.
+   *
+   * Mirrors what `SpotifyServiceManager.getFollowState` can actually answer: album, artist,
+   * playlist and show, and only for a real Spotify account — the bridged services piggy-backing
+   * on this class (Apple Music and friends, via `FakeSpotifyAccountProvider`) are skipped there
+   * by the same `fake` flag, so they must not advertise the control either.
+   *
+   * One rule rather than a literal per mapper. The same album used to come back as browsable
+   * from search and followable from the library, so whether the app drew a follow button
+   * depended on where you had found the record.
+   */
+  public followable(kind: ContentItemKind): boolean {
+    return FOLLOWABLE_KINDS.has(kind) && !this.getServiceAccount().fake;
   }
 
   public getServiceAccount(): ContentServiceAccount {
@@ -1173,17 +1193,24 @@ export class SpotifyAccountProvider implements ContentProvider {
         album: entry.album ?? '',
         duration: entry.durationSec,
         owner: entry.album || undefined,
-        type: 2,
+        kind: 'track',
         tag: 'track',
       } as ContentFolderItem;
     }
     if (entry.kind === 'artist') {
-      return { ...base, artist: entry.name, type: 7, tag: 'artist' };
+      return { ...base, artist: entry.name, kind: 'artist', tag: 'artist', followable: this.followable('artist') };
     }
     if (entry.kind === 'album') {
-      return { ...base, artist: entry.owner ?? '', type: 7, tag: 'album' };
+      return { ...base, artist: entry.owner ?? '', kind: 'album', tag: 'album', followable: this.followable('album') };
     }
-    return { ...base, artist: '', owner: entry.owner ?? '', type: 7, tag: 'playlist' };
+    return {
+      ...base,
+      artist: '',
+      owner: entry.owner ?? '',
+      kind: 'playlist',
+      tag: 'playlist',
+      followable: this.followable('playlist'),
+    };
   }
 
   private mapPlaylist(playlist: any): ContentFolderItem {
@@ -1194,7 +1221,8 @@ export class SpotifyAccountProvider implements ContentProvider {
       id: this.makeUri('playlist', id),
       name: String(playlist?.name ?? 'Playlist'),
       title: String(playlist?.name ?? 'Playlist'),
-      type: 12,
+      kind: 'playlist',
+      followable: this.followable('playlist'),
       items: totalItems,
       coverurl: cover,
       thumbnail: this.extractImage(playlist?.images, 1) ?? cover,
@@ -1216,7 +1244,8 @@ export class SpotifyAccountProvider implements ContentProvider {
       id: this.makeUri('album', id),
       name: String(album?.name ?? 'Album'),
       title: String(album?.name ?? 'Album'),
-      type: 12,
+      kind: 'album',
+      followable: this.followable('album'),
       items: Number(album?.total_tracks ?? 0),
       coverurl: cover,
       thumbnail: this.extractImage(album?.images, 1) ?? cover,
@@ -1234,7 +1263,8 @@ export class SpotifyAccountProvider implements ContentProvider {
       id: this.makeUri('artist', id),
       name: String(artist?.name ?? 'Artist'),
       title: String(artist?.name ?? 'Artist'),
-      type: 12,
+      kind: 'artist',
+      followable: this.followable('artist'),
       coverurl: cover,
       thumbnail: this.extractImage(artist?.images, 1) ?? cover,
       audiopath: this.makeUri('artist', id),
@@ -1251,7 +1281,8 @@ export class SpotifyAccountProvider implements ContentProvider {
       id: this.makeUri('show', id),
       name,
       title: name,
-      type: 12,
+      kind: 'show',
+      followable: this.followable('show'),
       coverurl: cover,
       thumbnail: this.extractImage(show?.images, 1) ?? cover,
       audiopath: this.makeUri('show', id),
@@ -1325,11 +1356,11 @@ export class SpotifyAccountProvider implements ContentProvider {
       thumbnail: entry.cover,
       audiopath: uri,
     };
-    // Tracks and podcast episodes are leaf/playable items (FileType.File).
+    // Tracks and podcast episodes are leaf/playable items.
     if (entry.kind === 'track' || entry.kind === 'episode') {
       return {
         ...base,
-        type: FileType.File,
+        kind: entry.kind,
         artist: entry.owner ?? '',
         album: entry.album ?? '',
         duration: entry.durationSec,
@@ -1337,10 +1368,16 @@ export class SpotifyAccountProvider implements ContentProvider {
       } as ContentFolderItem;
     }
     if (entry.kind === 'artist') {
-      return { ...base, type: 12, tag: 'artist' };
+      return { ...base, kind: 'artist', tag: 'artist', followable: this.followable('artist') };
     }
     // playlist / album / show: navigable containers.
-    return { ...base, type: 12, owner: entry.owner ?? '', tag: entry.kind };
+    return {
+      ...base,
+      kind: entry.kind,
+      owner: entry.owner ?? '',
+      tag: entry.kind,
+      followable: this.followable(entry.kind),
+    };
   }
 
   private mapTrack(track: any, albumContext?: { name?: string; images?: any[] }): ContentFolderItem {

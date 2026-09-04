@@ -116,6 +116,7 @@ export async function searchSpotifyAccount(
       artist: artists,
       kind: 'album',
       tag: 'album',
+      followable: provider.followable('album'),
     };
   };
 
@@ -134,6 +135,7 @@ export async function searchSpotifyAccount(
       artist: name,
       kind: 'artist',
       tag: 'artist',
+      followable: provider.followable('artist'),
     };
   };
 
@@ -154,6 +156,7 @@ export async function searchSpotifyAccount(
       owner_id: playlist?.owner?.id || '',
       kind: 'playlist',
       tag: 'playlist',
+      followable: provider.followable('playlist'),
     };
   };
 
@@ -173,6 +176,7 @@ export async function searchSpotifyAccount(
       artist: publisher,
       kind: 'show',
       tag: 'show',
+      followable: provider.followable('show'),
     };
   };
 

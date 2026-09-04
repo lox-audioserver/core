@@ -34,7 +34,15 @@ const FILE_TYPE_BY_KIND: Record<ContentItemKind, FileType> = {
  * infer, and half the catalogue still states one.
  */
 export function deriveLoxoneFileType(item: ContentFolderItem): FileType {
-  return item.type ?? FILE_TYPE_BY_KIND[resolveItemKind(item)];
+  if (item.type != null) {
+    return item.type;
+  }
+  const base = FILE_TYPE_BY_KIND[resolveItemKind(item)];
+  // `followable` only ever upgrades a plain container. A producer that sets it on a track is
+  // asking for a row the app cannot render, so the kind wins.
+  return item.followable && base === FileType.PlaylistBrowsable
+    ? FileType.PlaylistFollowable
+    : base;
 }
 
 /**

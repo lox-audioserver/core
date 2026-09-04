@@ -43,6 +43,18 @@ export interface ContentFolderItem {
    * clients receive it verbatim; new code should read {@link kind} instead.
    */
   tag?: string;
+  /**
+   * Whether the item can be followed at all — distinct from {@link followed}, which is whether it
+   * currently *is*.
+   *
+   * A capability, not a state: it says the service will answer a follow query for this row, so a
+   * client may offer the control. Only the real Spotify accounts set it, because
+   * `SpotifyServiceManager.getFollowState` is the only implementation and it answers for exactly
+   * album, artist, playlist and show — a bridged service addressed as `spotify` is skipped, and
+   * every other provider has no follow at all. Drawing the toggle anywhere else gives the user a
+   * button that reports "not followed" forever and does nothing when pressed.
+   */
+  followable?: boolean;
   nas?: boolean;
   origin?: string;
   owner?: string;

@@ -8,6 +8,8 @@ import {
 import { FileType } from '../src/domain/zones/enums';
 import type { ContentItemKind } from '../src/domain/media/contentKind';
 import type { ContentFolderItem } from '../src/ports/ContentTypes';
+import { SpotifyAccountProvider } from '../src/adapters/content/providers/spotify/spotifyAccountProvider';
+import { FakeSpotifyAccountProvider } from '../src/adapters/content/providers/spotify/fakeSpotifyAccountProvider';
 
 const item = (over: Partial<ContentFolderItem> = {}): ContentFolderItem => ({
   id: 'x',
@@ -90,4 +92,55 @@ test('an explicit type survives the trip to the wire unchanged', () => {
     folder.items.map((i) => i.type),
     [12, FileType.File],
   );
+});
+
+// The bug this field exists for: the same Spotify album came back as PlaylistBrowsable from
+// search and PlaylistFollowable from the library, so whether the app drew a follow button
+// depended on which screen you had found the record on. One rule in the provider now decides,
+// and the number is derived — so the two routes cannot drift apart again.
+test('a followable container renders the same wherever it was found', () => {
+  const fromSearch = item({ kind: 'album', tag: 'album', followable: true });
+  const fromLibrary = item({ kind: 'album', tag: 'album', followable: true, followed: false });
+  assert.equal(deriveLoxoneFileType(fromSearch), FileType.PlaylistFollowable);
+  assert.equal(deriveLoxoneFileType(fromLibrary), FileType.PlaylistFollowable);
+});
+
+// A bridged service reaches us addressed as `spotify` but cannot answer a follow query, and
+// neither can any other provider — so nothing may advertise the control by default.
+test('a container says browsable unless it claims it can be followed', () => {
+  assert.equal(deriveLoxoneFileType(item({ kind: 'album' })), FileType.PlaylistBrowsable);
+  assert.equal(
+    deriveLoxoneFileType(item({ kind: 'album', followable: false })),
+    FileType.PlaylistBrowsable,
+  );
+});
+
+// `followable` upgrades a container and nothing else. A track with a follow toggle is a row the
+// app cannot draw, so a producer that sets it there is ignored rather than believed.
+test('followable cannot turn a playable row into a container', () => {
+  assert.equal(deriveLoxoneFileType(item({ kind: 'track', followable: true })), FileType.File);
+  assert.equal(deriveLoxoneFileType(item({ kind: 'folder', followable: true })), FileType.Folder);
+});
+
+// The rule at its source, on both classes that produce these rows. `FakeSpotifyAccountProvider`
+// is how a bridged service (Apple Music and friends) is published as `spotify`, and
+// `SpotifyServiceManager.getFollowState` refuses it on the same `fake` flag — so it must not
+// advertise a control the server will not answer.
+test('only a real Spotify account claims a row can be followed', () => {
+  const options = {
+    providerId: 'spotify@rudy',
+    account: { id: 'rudy', refreshToken: 'stub' } as never,
+    persistAccount: async () => null,
+  };
+  const real = new SpotifyAccountProvider(options);
+  const bridged = new FakeSpotifyAccountProvider('applemusic', 'Apple Music', options);
+
+  for (const kind of ['album', 'artist', 'playlist', 'show'] as const) {
+    assert.equal(real.followable(kind), true, `real spotify ${kind}`);
+    assert.equal(bridged.followable(kind), false, `bridged ${kind}`);
+  }
+  // Only those four: a follow query for anything else has no answer.
+  for (const kind of ['track', 'episode', 'category', 'folder', 'radio'] as const) {
+    assert.equal(real.followable(kind), false, `not followable: ${kind}`);
+  }
 });
