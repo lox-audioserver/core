@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from './testHarness';
-import { resolveItemKind, isContainerKind } from '../src/adapters/content/contentItemKind';
+import { resolveItemKind, isContainerKind } from '../src/domain/media/contentKind';
 import { isTrackItem } from '../src/adapters/mediaserver/mediaContentProvider';
 import type { ContentFolderItem } from '../src/ports/ContentTypes';
 

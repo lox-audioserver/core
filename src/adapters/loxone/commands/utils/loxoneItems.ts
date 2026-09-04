@@ -1,6 +1,5 @@
-import { resolveItemKind } from '@/adapters/content/contentItemKind';
 import { FileType } from '@/domain/zones/enums';
-import type { ContentItemKind } from '@/domain/media/contentKind';
+import { resolveItemKind, type ContentItemKind } from '@/domain/media/contentKind';
 import type { ContentFolderItem } from '@/ports/ContentTypes';
 
 /**

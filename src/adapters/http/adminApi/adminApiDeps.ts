@@ -1,3 +1,4 @@
+import type { OutputDiscoveryPort } from '@/ports/OutputDiscoveryPort';
 import type { AdminApiOptions } from '@/adapters/http/adminApi/adminApiHandler';
 import { SonnClientApiHandler } from '@/adapters/http/sonnClientApi/sonnClientApiHandler';
 import { BeoremoteApiHandler } from '@/adapters/http/beoremote/beoremoteApiHandler';
@@ -33,6 +34,8 @@ import type { WebdavServer } from '@/adapters/webdav/webdavServer';
  * depended on was to read a fifty-two field bag and follow each name by hand.
  */
 export type AdminSurfaceDeps = {
+  /** Finds playback devices on the network; see OutputDiscoveryPort. */
+  outputDiscovery: OutputDiscoveryPort;
     alertFiles: AlertFilesPort;
     audioManager: AudioManager;
     configPort: ConfigPort;
@@ -73,6 +76,7 @@ export function createAdminApiDeps(
   services: AdminSurfaceServices,
 ): AdminApiOptions {
   return {
+    outputDiscovery: deps.outputDiscovery,
     onReinitialize: deps.onReinitialize,
     onSoftRestart: deps.onSoftRestart,
     onLoxoneToggle: deps.onLoxoneToggle,

@@ -11,11 +11,10 @@
  *   `spotify@bridge-…` disguise the Loxone clients require. That disguise is a translation
  *   for a client that knows one streaming service, and it stops at that adapter.
  */
-import { isContainerKind, resolveItemKind } from '@/adapters/content/contentItemKind';
 import { encodeContainerRef, encodePlayableRef } from '@/domain/media/browseRef';
 import type { ApiBrowseItem, ApiItemKind } from '@/domain/zones/apiTypes';
 import type { ContentFolderItem } from '@/ports/ContentTypes';
-import type { ContentItemKind } from '@/domain/media/contentKind';
+import { isContainerKind, resolveItemKind, type ContentItemKind } from '@/domain/media/contentKind';
 
 /**
  * Every internal kind is a public kind of the same name, so this is a widening cast rather

@@ -3,6 +3,7 @@ import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { test } from './testHarness';
+import { makeOutputDiscoveryFake } from './fakes/outputDiscovery';
 import {
   AdminApiHandler,
   buildSqueezeliteAdminPlayerSnapshot,
@@ -146,6 +147,7 @@ function createHandler(): AdminApiHandler {
   });
   favoritesManager.initOnce({ zoneManager });
   return new AdminApiHandler({
+    outputDiscovery: makeOutputDiscoveryFake(),
     zoneManager,
     configPort: noopConfigPort,
     notifier: makeNotifierFake(),

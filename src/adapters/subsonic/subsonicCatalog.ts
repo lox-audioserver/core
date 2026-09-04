@@ -4,7 +4,7 @@ import type { ConfigPort } from '@/ports/ConfigPort';
 import type { ContentManager } from '@/adapters/content/contentManager';
 import type { ContentFolder, ContentFolderItem } from '@/ports/ContentTypes';
 import { decodeTrackUri } from '@/domain/media/trackIdentity';
-import { resolveItemKind } from '@/adapters/content/contentItemKind';
+import { resolveItemKind } from '@/domain/media/contentKind';
 import {
   buildBrowsableServices,
   parseProviderAllowlist,

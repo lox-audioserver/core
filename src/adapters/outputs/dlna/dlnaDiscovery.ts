@@ -1,3 +1,4 @@
+import type { DeviceDiscoveryOptions, DlnaDiscoveredDevice } from '@/ports/OutputDiscoveryPort';
 import dgram from 'node:dgram';
 import { setTimeout as delay } from 'node:timers/promises';
 import { URL } from 'node:url';
@@ -12,22 +13,6 @@ export interface DlnaEndpointInfo {
   renderingControlEventUrl?: string;
   friendlyName?: string;
   descriptionUrl?: string;
-}
-
-export interface DlnaDiscoveredDevice {
-  id: string;
-  name?: string;
-  host: string;
-  address?: string;
-  location: string;
-  controlUrl?: string;
-  renderingControlUrl?: string;
-}
-
-interface DiscoveryOptions {
-  host?: string;
-  timeoutMs?: number;
-  mx?: number;
 }
 
 interface SsdpResponse {
@@ -47,7 +32,7 @@ const SEARCH_TARGETS = [
 const log = createLogger('Transport', 'DLNADiscovery');
 
 const endpointCache = new Map<string, Promise<DlnaEndpointInfo | null>>();
-export function resolveDlnaEndpoints(options: DiscoveryOptions = {}): Promise<DlnaEndpointInfo | null> {
+export function resolveDlnaEndpoints(options: DeviceDiscoveryOptions = {}): Promise<DlnaEndpointInfo | null> {
   const key = options.host?.toLowerCase() ?? '*';
   const cached = endpointCache.get(key);
   if (cached) {
@@ -75,7 +60,7 @@ function pruneRecentDevices(now: number): void {
 }
 
 export async function discoverDlnaDevices(
-  options: DiscoveryOptions = {},
+  options: DeviceDiscoveryOptions = {},
 ): Promise<DlnaDiscoveredDevice[]> {
   const responses = await searchSsdp(options);
   const hostFilter = options.host?.toLowerCase();
@@ -158,7 +143,7 @@ export async function discoverDlnaDevices(
   return devices;
 }
 
-async function discover(options: DiscoveryOptions): Promise<DlnaEndpointInfo | null> {
+async function discover(options: DeviceDiscoveryOptions): Promise<DlnaEndpointInfo | null> {
   const responses = await searchSsdp(options);
   const hostFilter = options.host?.toLowerCase();
   for (const { location, responder } of responses) {
@@ -183,7 +168,7 @@ async function discover(options: DiscoveryOptions): Promise<DlnaEndpointInfo | n
   return null;
 }
 
-async function searchSsdp(options: DiscoveryOptions): Promise<SsdpResponse[]> {
+async function searchSsdp(options: DeviceDiscoveryOptions): Promise<SsdpResponse[]> {
   const socket = dgram.createSocket({ type: 'udp4', reuseAddr: true });
   // SSDP over UDP multicast is lossy and renderers answer spread randomly across the MX
   // window, so a single burst reliably misses devices (and misses different ones each run).

@@ -9,10 +9,8 @@ import type {
   SonnClientSourceConfig,
   ZoneConfig,
 } from '@/domain/config/types';
-import {
-  bluetoothClientId,
-  type BluetoothNowPlaying,
-} from '@/adapters/inputs/bluetooth/bluetoothInputService';
+import { bluetoothClientId } from '@/domain/inputs/bluetoothIdentity';
+import type { BluetoothNowPlaying } from '@/adapters/inputs/bluetooth/bluetoothInputService';
 
 /**
  * The management API for devices running Sonn Client.

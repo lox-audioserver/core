@@ -1,3 +1,4 @@
+import type { OutputDiscoveryPort } from '@/ports/OutputDiscoveryPort';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createConnection } from 'node:net';
 import type { ComponentLogger } from '@/shared/logging/logger';
@@ -11,12 +12,7 @@ import {
   findMusicAssistantBridge,
 } from '@/shared/musicassistant/maBridgeResolver';
 import { sendspinCore } from '@sonn-audio/node-sendspin';
-import { bluetoothClientId } from '@/adapters/inputs/bluetooth/bluetoothInputService';
-import { OUTPUT_DEFINITIONS } from '@/adapters/outputs';
-import { discoverAirplayDevices } from '@/adapters/outputs/airplay/airplayDiscovery';
-import { discoverGoogleCastDevices } from '@/adapters/outputs/googleCast/googleCastDiscovery';
-import { discoverDlnaDevices } from '@/adapters/outputs/dlna/dlnaDiscovery';
-import { discoverSonosDevices } from '@/adapters/outputs/sonos/sonosDiscovery';
+import { bluetoothClientId } from '@/domain/inputs/bluetoothIdentity';
 import type { Route } from '@/adapters/http/adminApi/routeTypes';
 
 /** Browser tabs are ephemeral local destinations, not physical output devices. */
@@ -33,6 +29,8 @@ export type StateControllerDefinition = {
 
 export type TransportsHandlerDeps = {
   log: ComponentLogger;
+  /** Finds playback devices on the network; see OutputDiscoveryPort. */
+  discovery: OutputDiscoveryPort;
   configPort: ConfigPort;
   mdns: MdnsPort;
   snapcastCore: SnapcastCore;
@@ -116,7 +114,7 @@ export function buildTransportsRoutes(deps: TransportsHandlerDeps): Route[] {
 
 function handleTransportDefinitions(res: ServerResponse, deps: TransportsHandlerDeps): void {
   // Every output the build ships is offered; there is no per-type availability gate.
-  const payload = OUTPUT_DEFINITIONS.filter(
+  const payload = deps.discovery.definitions.filter(
     (definition) => !HIDDEN_TRANSPORT_IDS.has(definition.id),
   ).map((definition) => ({
     id: definition.id,
@@ -136,7 +134,7 @@ function handleTransportDefinitions(res: ServerResponse, deps: TransportsHandler
 
 async function handleAirplayDiscovery(res: ServerResponse, deps: TransportsHandlerDeps): Promise<void> {
   try {
-    const devices = await discoverAirplayDevices();
+    const devices = await deps.discovery.airplay();
     deps.sendJson(res, 200, { devices });
   } catch (err) {
     deps.log.warn('airplay discovery failed', { err });
@@ -156,7 +154,7 @@ async function handleGoogleCastDiscovery(
       .flatMap((value) => value.split(','))
       .map((value) => value.trim())
       .filter((value) => value.length > 0);
-    const devices = await discoverGoogleCastDevices(8000, hosts);
+    const devices = await deps.discovery.googleCast(8000, hosts);
     deps.sendJson(res, 200, { devices });
   } catch (err) {
     deps.log.warn('google cast discovery failed', { err });
@@ -172,7 +170,7 @@ async function handleDlnaDiscovery(
   try {
     const url = new URL(req.url ?? '', 'http://localhost');
     const host = url.searchParams.get('host')?.trim() || undefined;
-    const devices = await discoverDlnaDevices({ host });
+    const devices = await deps.discovery.dlna({ host });
     deps.sendJson(res, 200, { devices });
   } catch (err) {
     deps.log.warn('dlna discovery failed', { err });
@@ -194,7 +192,7 @@ async function handleSonosDiscovery(
     const allowNetworkScan =
       typeof networkScan === 'string' &&
       ['true', '1', 'yes', 'on'].includes(networkScan.toLowerCase());
-    const devices = await discoverSonosDevices({
+    const devices = await deps.discovery.sonos({
       preferredName,
       householdId,
       allowNetworkScan,

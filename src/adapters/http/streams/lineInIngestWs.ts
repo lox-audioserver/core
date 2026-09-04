@@ -3,7 +3,7 @@ import { PassThrough } from 'node:stream';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createLogger } from '@/shared/logging/logger';
 import type { LineInIngestRegistry } from '@/adapters/inputs/linein/lineInIngestRegistry';
-import { LINEIN_INGEST_HIGH_WATER_MARK } from '@/adapters/inputs/linein/lineInConstants';
+import { LINEIN_INGEST_HIGH_WATER_MARK } from '@/domain/config/lineIn';
 
 const PATH_PREFIX = '/ingest/';
 

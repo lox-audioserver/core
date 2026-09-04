@@ -1,9 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from './testHarness';
-import {
-  BluetoothInputService,
-  bluetoothClientId,
-} from '../src/adapters/inputs/bluetooth/bluetoothInputService';
+import { BluetoothInputService } from '../src/adapters/inputs/bluetooth/bluetoothInputService';
+import { bluetoothClientId } from '../src/domain/inputs/bluetoothIdentity';
 import type { ZoneConfig } from '../src/domain/config/types';
 import type { SendspinSessionHooks } from '@sonn-audio/node-sendspin';
 

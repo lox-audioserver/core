@@ -1,27 +1,8 @@
+import type { SonosDiscoveredDevice, SonosDiscoveryOptions } from '@/ports/OutputDiscoveryPort';
 import dgram from 'node:dgram';
 import os from 'node:os';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createLogger } from '@/shared/logging/logger';
-
-export interface SonosDiscoveredDevice {
-  host: string;
-  name?: string;
-  roomName?: string;
-  udn?: string;
-  householdId?: string;
-  /**
-   * Passive/bonded satellite (e.g. stereo pair member, surround, sub).
-   * These should not be selectable as standalone playback targets.
-   */
-  passiveSatellite?: boolean;
-}
-
-interface DiscoveryOptions {
-  preferredName?: string;
-  householdId?: string;
-  allowNetworkScan?: boolean;
-  timeoutMs?: number;
-}
 
 interface SsdpResponse {
   location: string;
@@ -40,7 +21,7 @@ const SEARCH_TARGETS = [
 const log = createLogger('Transport', 'SonosDiscovery');
 
 export async function discoverSonosDevice(
-  options: DiscoveryOptions = {},
+  options: SonosDiscoveryOptions = {},
 ): Promise<SonosDiscoveredDevice | null> {
   const candidates = await discoverSonosDevices(options);
   if (!candidates.length) {
@@ -61,7 +42,7 @@ export async function discoverSonosDevice(
 }
 
 export async function discoverSonosDevices(
-  options: DiscoveryOptions = {},
+  options: SonosDiscoveryOptions = {},
 ): Promise<SonosDiscoveredDevice[]> {
   const timeoutMs = options.timeoutMs ?? 1500;
   const responses = await searchSsdp(timeoutMs);

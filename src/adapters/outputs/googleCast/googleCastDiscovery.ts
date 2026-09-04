@@ -1,17 +1,7 @@
+import type { GoogleCastDeviceDescriptor } from '@/ports/OutputDiscoveryPort';
 import Bonjour from 'bonjour-service';
 import { createLogger } from '@/shared/logging/logger';
 import { bestEffort } from '@/shared/bestEffort';
-
-export interface GoogleCastDeviceDescriptor {
-  id: string;
-  name: string;
-  host: string;
-  address?: string;
-  port: number;
-  manufacturer?: string;
-  model?: string;
-  txt?: Record<string, unknown>;
-}
 
 const log = createLogger('Transport', 'GoogleCastDiscovery');
 

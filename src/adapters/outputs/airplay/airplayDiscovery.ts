@@ -1,15 +1,6 @@
+import type { AirplayDeviceDescriptor } from '@/ports/OutputDiscoveryPort';
 import Bonjour from 'bonjour-service';
 import { createLogger } from '@/shared/logging/logger';
-
-export interface AirplayDeviceDescriptor {
-  id: string;
-  name: string;
-  host: string;
-  address?: string;
-  port: number;
-  protocol: 'airplay' | 'raop';
-  txt?: Record<string, unknown>;
-}
 
 const log = createLogger('Transport', 'AirPlayDiscovery');
 

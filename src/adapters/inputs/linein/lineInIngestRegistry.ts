@@ -1,6 +1,6 @@
 import { PassThrough } from 'node:stream';
 import { createLogger } from '@/shared/logging/logger';
-import { LINEIN_INGEST_HIGH_WATER_MARK } from '@/adapters/inputs/linein/lineInConstants';
+import { LINEIN_INGEST_HIGH_WATER_MARK } from '@/domain/config/lineIn';
 
 type LineInIngestSession = {
   id: string;

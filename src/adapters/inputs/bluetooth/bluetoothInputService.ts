@@ -1,3 +1,4 @@
+import { bluetoothClientId } from '@/domain/inputs/bluetoothIdentity';
 import { PassThrough } from 'node:stream';
 import { createLogger } from '@/shared/logging/logger';
 import type { ZoneConfig } from '@/domain/config/types';
@@ -19,9 +20,6 @@ export type BluetoothNowPlaying = {
 };
 
 /** The sendspin client id a device's Bluetooth input sends its audio under. */
-export function bluetoothClientId(deviceId: string): string {
-  return `${deviceId.trim()}-bt`;
-}
 
 type ZoneEntry = {
   zoneId: number;

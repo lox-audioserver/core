@@ -53,6 +53,7 @@ import './lineInCommandQueue.test';
 import './lineInActivationService.test';
 import './libraryUploadFiling.test';
 import './adminApiJsonBody.test';
+import './transportsDiscovery.test';
 import './audioServersAndBearer.test';
 import './outputFactory.airplay.test';
 import './outputFactory.sendspin.test';

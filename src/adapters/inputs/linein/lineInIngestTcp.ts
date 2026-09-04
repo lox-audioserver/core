@@ -2,7 +2,7 @@ import net from 'node:net';
 import { PassThrough } from 'node:stream';
 import { createLogger } from '@/shared/logging/logger';
 import type { LineInIngestRegistry } from '@/adapters/inputs/linein/lineInIngestRegistry';
-import { LINEIN_INGEST_HIGH_WATER_MARK } from '@/adapters/inputs/linein/lineInConstants';
+import { LINEIN_INGEST_HIGH_WATER_MARK } from '@/domain/config/lineIn';
 
 const DEFAULT_TCP_PORT = 7080;
 const MAX_ID_BYTES = 256;

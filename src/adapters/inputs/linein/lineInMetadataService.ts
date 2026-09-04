@@ -3,7 +3,7 @@ import { recognizeBytes, type DecodedSignature } from 'shazamio-core';
 import { createLogger } from '@/shared/logging/logger';
 import { safeReadText } from '@/shared/bestEffort';
 import type { LineInIngestRegistry } from '@/adapters/inputs/linein/lineInIngestRegistry';
-import { resolveLineInSampleRate } from '@/adapters/inputs/linein/lineInConstants';
+import { resolveLineInSampleRate } from '@/domain/config/lineIn';
 import type { ZoneManagerFacade } from '@/application/zones/createZoneManager';
 import { buildWavHeader } from '@/ports/types/audioFormat';
 import type { LineInInputConfig } from '@/domain/config/types';

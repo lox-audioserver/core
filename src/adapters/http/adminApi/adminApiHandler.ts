@@ -1,3 +1,4 @@
+import type { OutputDiscoveryPort } from '@/ports/OutputDiscoveryPort';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createLogger } from '@/shared/logging/logger';
 import type { NotifierPort } from '@/ports/NotifierPort';
@@ -25,6 +26,8 @@ import type { SonnCorePeerRegistry } from '@/adapters/discovery/sonnCorePeerRegi
 import type { MqttPublisher } from '@/adapters/mqtt/mqttPublisher';
 
 export type AdminApiOptions = {
+  /** Finds playback devices on the network; see OutputDiscoveryPort. */
+  outputDiscovery: OutputDiscoveryPort;
   onReinitialize?: () => Promise<boolean>;
   onSoftRestart?: () => Promise<boolean>;
   onLoxoneToggle?: (enabled: boolean) => Promise<void>;
@@ -171,6 +174,7 @@ export class AdminApiHandler {
   private readonly customRadioStore: CustomRadioStore;
   private readonly zoneManager: ZoneManagerFacade;
   private readonly configPort: ConfigPort;
+  private readonly outputDiscovery: OutputDiscoveryPort;
   private readonly spotifyInputService: SpotifyInputService;
   private readonly sendspinLineInService: SendspinLineInService;
   private readonly syncMediaServer?: () => Promise<void>;
@@ -206,6 +210,7 @@ export class AdminApiHandler {
     this.customRadioStore = options.customRadioStore;
     this.zoneManager = options.zoneManager;
     this.configPort = options.configPort;
+    this.outputDiscovery = options.outputDiscovery;
     this.spotifyInputService = options.spotifyInputService;
     this.sendspinLineInService = options.sendspinLineInService;
     this.syncMediaServer = options.syncMediaServer;
@@ -321,6 +326,7 @@ export class AdminApiHandler {
       }),
       ...buildTransportsRoutes({
         log: this.log,
+        discovery: this.outputDiscovery,
         configPort: this.configPort,
         mdns: this.mdns,
         snapcastCore: this.snapcastCore,
