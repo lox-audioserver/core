@@ -24,7 +24,7 @@ import type { MdnsPort } from '@/ports/MdnsPort';
 import type { SonnCorePeerRegistry } from '@/adapters/discovery/sonnCorePeerRegistry';
 import type { MqttPublisher } from '@/adapters/mqtt/mqttPublisher';
 
-type AdminApiOptions = {
+export type AdminApiOptions = {
   onReinitialize?: () => Promise<boolean>;
   onSoftRestart?: () => Promise<boolean>;
   onLoxoneToggle?: (enabled: boolean) => Promise<void>;

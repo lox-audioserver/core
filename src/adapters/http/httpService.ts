@@ -4,9 +4,9 @@ import type { Duplex } from 'node:stream';
 import { createLogger } from '@/shared/logging/logger';
 import type { HttpServerConfig } from '@/config/http';
 import { AdminApiHandler } from '@/adapters/http/adminApi/adminApiHandler';
+import { createAdminApiDeps, type AdminSurfaceDeps } from '@/adapters/http/adminApi/adminApiDeps';
 import { MusicStreamingHandler } from '@/adapters/http/music/musicStreamingHandler';
 import { StaticFileHandler } from '@/adapters/http/static/staticFileHandler';
-import { setOutputDelayMs } from '@/adapters/http/outputDelay';
 import { SendspinGateway } from '@/adapters/http/sendspin/sendspinGateway';
 import { SnapcastGateway } from '@/adapters/http/snapcast/snapcastGateway';
 import { AudioStreamHandler } from '@/adapters/http/streams/audioStreamHandler';
@@ -15,90 +15,54 @@ import { LineInIngestWebSocket } from '@/adapters/http/streams/lineInIngestWs';
 import { SonnClientApiHandler } from '@/adapters/http/sonnClientApi/sonnClientApiHandler';
 import { BeoremoteApiHandler } from '@/adapters/http/beoremote/beoremoteApiHandler';
 import { ApiHandler } from '@/adapters/http/api/apiHandler';
-import { buildPublicAudioServersList } from '@/adapters/discovery/audioServersList';
+import { createApiHandlerDeps, type ApiSurfaceDeps } from '@/adapters/http/api/apiHandlerDeps';
 import { AboutStore } from '@/adapters/content/enrichment/aboutStore';
 import { AboutService } from '@/adapters/http/api/aboutService';
 import { BrowseService } from '@/adapters/http/api/browseService';
 import { DestinationService } from '@/adapters/http/api/destinationService';
-import { encodeContainerRef, resolveUriFromRef } from '@/domain/media/browseRef';
-import { toApiQueue } from '@/adapters/http/api/queueProjection';
-import { toApiFavorites, toApiRecents } from '@/adapters/http/api/libraryProjection';
-import { toApiInput } from '@/adapters/http/api/inputProjection';
-import { getZoneEqualizerBands } from '@/domain/zones/equalizer';
-import { resizeCoverUrl, resizeTuneInCoverUrl } from '@/shared/coverArt';
-import type { ApiEventHub } from '@/adapters/http/api/apiEventHub';
-import type {
-  ApiGroupResult,
-  ApiOutput,
-  ApiPowerState,
-  ApiAudioFormat,
-  ApiVolumeLimits,
-  ApiPlaylist,
-} from '@/domain/zones/apiTypes';
 import { isLocalRequest } from '@/shared/utils/net';
 import type { StreamProxyRoute } from '@/shared/streamProxyRoute';
-import type { NotifierPort } from '@/ports/NotifierPort';
 import type { ZoneManagerFacade } from '@/application/zones/createZoneManager';
-import type { AudioAnalysisService } from '@/application/audio/audioAnalysisService';
-import type { AudioAnalysisEvent, AudioAnalysisSubscription } from '@/application/audio/audioAnalysisService';
-import type { ApiOutputCapabilities } from '@/domain/zones/apiTypes';
-import type { ConfigPort } from '@/ports/ConfigPort';
-import type { RecentsManager } from '@/application/zones/recents/recentsManager';
-import type { FavoritesManager } from '@/application/zones/favorites/favoritesManager';
-import type {
-  GroupManagerReadPort,
-  GroupManagerWritePort,
-} from '@/application/groups/groupManager';
-import type { ContentManager } from '@/adapters/content/contentManager';
 import type { EnginePort } from '@/ports/EnginePort';
-import type { AlertFilesPort } from '@/ports/AlertFilesPort';
-import type { AlertsPort } from '@/ports/AlertsPort';
 import type { LineInIngestRegistry } from '@/adapters/inputs/linein/lineInIngestRegistry';
 import type { LineInActivationRegistry } from '@/adapters/inputs/linein/lineInActivationRegistry';
 import type { BluetoothNowPlayingSink } from '@/adapters/http/sonnClientApi/sonnClientApiHandler';
-import type { LineInActivationService } from '@/application/inputs/lineInActivationService';
-import type { SendspinLineInService } from '@/adapters/inputs/linein/sendspinLineInService';
-import type { MusicAssistantStreamService } from '@/adapters/inputs/musicassistant/musicAssistantStreamService';
-import type { SpotifyInputService } from '@/adapters/inputs/spotify/spotifyInputService';
-import type { SnapcastCore } from '@/adapters/outputs/snapcast/snapcastCore';
 import type { StreamEvents } from '@/adapters/http/streams/streamEvents';
-import type { LoxoneWsNotifier } from '@/adapters/loxone/ws/notifier';
 import type { LoxoneCommandProcessor } from '@/adapters/loxone/http/commandProcessor';
 import type { ConnectionRegistry } from '@/adapters/loxone/ws/connectionRegistry';
 import type { BrowserZoneRegistry } from '@/application/zones/browserZoneRegistry';
-import {
-  connection as WebSocketConnection,
-  server as WebSocketServer,
-} from 'websocket';
-import type { SpotifyServiceManagerProvider } from '@/adapters/content/providers/spotifyServiceManager';
-import type { CustomRadioStore } from '@/adapters/content/providers/customRadioStore';
-import type { AudioManager } from '@/application/playback/audioManager';
-import type { ZoneAudioPreferences } from '@/application/playback/ZoneAudioPreferences';
-import type { SqueezeliteCore } from '@/adapters/outputs/squeezelite/squeezeliteCore';
+import { connection as WebSocketConnection, server as WebSocketServer } from 'websocket';
 import type { LmsCliServer } from '@/adapters/outputs/squeezelite/lmsCliServer';
-import type { MdnsPort } from '@/ports/MdnsPort';
-import type { SonnCorePeerRegistry } from '@/adapters/discovery/sonnCorePeerRegistry';
 import type { MediaServer } from '@/adapters/mediaserver/mediaServer';
-import type { MqttPublisher } from '@/adapters/mqtt/mqttPublisher';
 import type { SubsonicApi } from '@/adapters/subsonic/subsonicApi';
 import type { WebdavServer } from '@/adapters/webdav/webdavServer';
 import type { DlnaInputService } from '@/adapters/inputs/dlna/dlnaInputService';
-import type { ServerLifecycle } from '@/domain/server/lifecycle';
-import { buildHealthReport } from '@/adapters/http/api/healthReport';
 
 /**
- * The Loxone link as a health signal, or null when Loxone is not part of this install.
+ * What the streaming and websocket transports need: the engine, the ingest registries and the
+ * gateways, plus the optional servers an install may or may not be running.
  *
- * A server nobody ever pointed a Miniserver at should not report a Loxone check at all —
- * an absent integration is not a degraded one.
+ * The third of the three surfaces this gateway hosts. `HttpServiceOptions` is their sum, which is
+ * what a composition point's dependencies honestly are — the difference is that each surface now
+ * declares its own, so a route's needs can be read off a type instead of traced by hand.
  */
-function loxoneHealthInputs(
-  audioserver: { paired?: boolean; loxoneEnabled?: boolean } | undefined,
-): { enabled: boolean; paired: boolean } | null {
-  const enabled = audioserver?.loxoneEnabled === true;
-  const paired = audioserver?.paired === true;
-  return enabled || paired ? { enabled, paired } : null;
-}
+export type TransportSurfaceDeps = {
+    /** The Bluetooth input, so a phone's now-playing reaches the room it is playing in. */
+    bluetoothInput?: BluetoothNowPlayingSink;
+    browserZoneRegistry: BrowserZoneRegistry;
+    connectionRegistry: ConnectionRegistry;
+    dlnaInput?: DlnaInputService;
+    engine: EnginePort;
+    lineInActivation: LineInActivationRegistry;
+    lineInRegistry: LineInIngestRegistry;
+    loxoneProcessor: LoxoneCommandProcessor | null;
+    squeezeliteCli: LmsCliServer;
+    streamEvents: StreamEvents;
+    streamProxyRoutes: StreamProxyRoute[];
+    subsonic?: SubsonicApi;
+};
+
+export type HttpServiceOptions = ApiSurfaceDeps & AdminSurfaceDeps & TransportSurfaceDeps;
 
 /**
  * Hosts the public HTTP gateway (admin UI, API stub, music streaming, Sendspin).
@@ -135,70 +99,7 @@ export class HttpService {
 
   constructor(
     private readonly config: HttpServerConfig,
-    options: {
-      onReinitialize?: () => Promise<boolean>;
-      onSoftRestart?: () => Promise<boolean>;
-      onLoxoneToggle?: (enabled: boolean) => Promise<void>;
-      notifier: NotifierPort;
-      loxoneNotifier: LoxoneWsNotifier;
-      spotifyManagerProvider: SpotifyServiceManagerProvider;
-      customRadioStore: CustomRadioStore;
-      zoneManager: ZoneManagerFacade;
-      audioAnalysis: AudioAnalysisService;
-      configPort: ConfigPort;
-      engine: EnginePort;
-      streamEvents: StreamEvents;
-      lineInRegistry: LineInIngestRegistry;
-      lineInActivation: LineInActivationRegistry;
-      /** The Bluetooth input, so a phone's now-playing reaches the room it is playing in. */
-      bluetoothInput?: BluetoothNowPlayingSink;
-      lineInActivationService: LineInActivationService;
-      sendspinLineInService: SendspinLineInService;
-      musicAssistantStreamService: MusicAssistantStreamService;
-      spotifyInputService: SpotifyInputService;
-      snapcastCore: SnapcastCore;
-      squeezeliteCore: SqueezeliteCore;
-      recentsManager: RecentsManager;
-      favoritesManager: FavoritesManager;
-      groupManager: GroupManagerReadPort & GroupManagerWritePort;
-      contentManager: ContentManager;
-      audioManager: AudioManager;
-      zoneAudioPrefs: ZoneAudioPreferences;
-      squeezeliteCli: LmsCliServer;
-      mdnsPort: MdnsPort;
-      sonnCorePeers: SonnCorePeerRegistry;
-      alertFiles: AlertFilesPort;
-      /** Plays announcements into zones; see ApiHandlerDeps.playAlert. */
-      alerts: AlertsPort;
-      loxoneProcessor: LoxoneCommandProcessor | null;
-      connectionRegistry: ConnectionRegistry;
-      apiEventHub: ApiEventHub;
-      /** Resolves which device a zone's output plays to; see ApiOutput.device. */
-      resolveOutputDevice: (zoneId: number) => ApiOutput['device'] | undefined;
-      /** Resolves a zone's volume cap, power-on level and step. */
-      resolveVolumeLimits: (zoneId: number) => ApiVolumeLimits | undefined;
-      /** Resolves the last confirmed and desired physical power state. */
-      resolvePowerState: (zoneId: number) => ApiPowerState | null;
-      /** Resolves which protocol a zone plays over; see ApiOutput. */
-      resolveOutputProtocol: (zoneId: number) => string | null;
-      waveforms: { get: (audiopath: string) => { buckets: number[]; durationMs: number | null } | null };
-      /** Resolves the configured name of the service an audiopath belongs to. */
-      resolveServiceLabel: (audiopath: string) => string | null;
-      /** Names a configured line-in for `source.name`; see InputLabelLookup. */
-      resolveInputLabel: (inputId: string) => string | null;
-      /** What a zone is streaming, for `format`; see toApiAudioFormat. */
-      resolveStreamFormat: (zoneId: number) => ApiAudioFormat | null;
-      serverVersion: string;
-      /** Whether the server is serving yet, for /health and /ready. */
-      lifecycle: ServerLifecycle;
-      browserZoneRegistry: BrowserZoneRegistry;
-      streamProxyRoutes: StreamProxyRoute[];
-      mediaServer?: MediaServer;
-      mqttPublisher?: MqttPublisher;
-      subsonic?: SubsonicApi;
-      webdav?: WebdavServer;
-      dlnaInput?: DlnaInputService;
-    },
+    options: HttpServiceOptions,
   ) {
     this.sonnClientApi = new SonnClientApiHandler(
       options.configPort,
@@ -219,292 +120,13 @@ export class HttpService {
       config.port,
       (zoneId) => options.resolveOutputProtocol(zoneId),
     );
-    this.api = new ApiHandler({
-      eventHub: options.apiEventHub,
-      getAllZoneStates: () => options.zoneManager.getAllZoneStates(),
-      getZoneState: (zoneId) => options.zoneManager.getZoneState(zoneId),
-      handleCommand: (zoneId, command, payload) =>
-        options.zoneManager.handleCommand(zoneId, command, payload),
-      setPower: (zoneId, signal) => options.zoneManager.setPower(zoneId, signal),
-      powerOffImmediately: (zoneId) => options.zoneManager.powerOffImmediately(zoneId),
-      getOutputCapabilities: (zoneId) =>
-        options.zoneManager.getOutputCapabilities(zoneId) as ApiOutputCapabilities | null,
-      getOutputSync: (zoneId) => options.zoneManager.getOutputSyncStatus(zoneId),
-      getWaveform: (audiopath) => options.waveforms.get(audiopath),
-      getGroup: (zoneId) => options.zoneManager.getGroupMembership(zoneId),
-      // The same setter the admin route uses, so both transports write the config identically.
-      setOutputDelay: (zoneId, delayMs, clientId) =>
-        setOutputDelayMs(
-          {
-            configPort: options.configPort,
-            setOutputLatency: (id, ms, target) =>
-              options.zoneManager.setOutputLatency(id, ms, target),
-          },
-          zoneId,
-          delayMs,
-          clientId,
-        ),
-      getAudioAnalysisFormat: (zoneId) => {
-        const output = options.resolveStreamFormat(zoneId)?.output;
-        return output
-          ? { sampleRate: output.sampleRate, channels: output.channels, bitDepth: output.bitDepth ?? 16 }
-          : null;
-      },
-      subscribeAudioAnalysis: (
-        zoneId: number,
-        analysisOptions: AudioAnalysisSubscription,
-        listener: (event: AudioAnalysisEvent) => void,
-      ) => options.audioAnalysis.subscribe(zoneId, analysisOptions, listener),
-      // 'api' as the type, so anything keying on how playback started can tell this
-      // apart from a Loxone tap or a favourite.
-      // Accepts a browse id as well as a raw audiopath: browse hands out ids, and the guide
-      // promises they round-trip into play.
-      playContent: (zoneId, uri) =>
-        options.zoneManager.playContent(zoneId, resolveUriFromRef(uri), 'api'),
-      getOutputDevice: (zoneId) => options.resolveOutputDevice(zoneId),
-      getVolumeLimits: (zoneId) => options.resolveVolumeLimits(zoneId),
-      getPowerState: (zoneId) => options.resolvePowerState(zoneId),
-      getOutputProtocol: (zoneId) => options.resolveOutputProtocol(zoneId),
-      getHealth: () =>
-        buildHealthReport({
-          lifecycle: options.lifecycle.snapshot(),
-          version: options.serverVersion,
-          zones: options.zoneManager.getAllZoneStates().map((state) => {
-            // A zone has one session but a session can encode several profiles, so fold
-            // them into the worst case: any profile failing means this zone is failing.
-            const stats = options.audioManager.getStreamStats(state.id);
-            return {
-              id: state.id,
-              name: state.name,
-              restarts: stats.reduce((worst, entry) => Math.max(worst, entry.restarts), 0),
-              lastError: stats.find((entry) => entry.lastError)?.lastError ?? null,
-            };
-          }),
-          loxone: loxoneHealthInputs(options.configPort.getConfig()?.system?.audioserver),
-        }),
-      getLifecycle: () => options.lifecycle.snapshot(),
-      listDestinations: (clientId) => this.destinationService.list(clientId),
-      getLocalDestinationOwner: (zoneId) => this.destinationService.ownerOf(zoneId),
-      registerLocalDestination: (opts) => this.destinationService.registerLocal(opts),
-      removeLocalDestination: (id) => this.destinationService.removeLocal(id),
-      listServices: () => this.browseService.listServices(),
-      browse: (id, start, limit) => this.browseService.browse(id, start, limit),
-      describeItem: (id) => this.browseService.describeItem(id),
-      describeAbout: (id) => this.aboutService.describeAbout(id),
-      search: (request) => this.browseService.search(request),
-      listPlaylists: async (start, limit) => {
-        const page = await options.contentManager.listLocalPlaylists(start, limit);
-        return { items: page.items.map(toApiPlaylist), total: page.total };
-      },
-      createPlaylist: async (name) => toApiPlaylist(options.contentManager.createLocalPlaylist(name)),
-      renamePlaylist: async (id, name) => {
-        const playlist = options.contentManager.renameLocalPlaylist(Number(id), name);
-        return playlist ? toApiPlaylist(playlist) : null;
-      },
-      deletePlaylist: async (id) => options.contentManager.deleteLocalPlaylist(Number(id)),
-      addPlaylistItem: async (id, itemId) =>
-        (await options.contentManager.addItemsToLocalPlaylist(Number(id), resolveUriFromRef(itemId))) > 0,
-      removePlaylistItem: async (id, position) =>
-        options.contentManager.removeLocalPlaylistItem(Number(id), position),
-      movePlaylistItem: async (id, from, to) =>
-        options.contentManager.moveLocalPlaylistItem(Number(id), from, to),
-      getInputs: () => {
-        // listLineInInputs resolves ids/names/icons; controllable and metadataEnabled are
-        // config flags it does not carry, so they are joined back on by id here.
-        const configured = options.configPort.getConfig()?.inputs?.lineIn?.inputs ?? [];
-        return options.lineInActivationService.listLineInInputs().map((input) => {
-          const record = configured.find(
-            (entry) => typeof entry?.id === 'string' && entry.id.trim() === input.id,
-          );
-          return toApiInput({
-            id: input.id,
-            name: input.name,
-            iconType: input.iconType,
-            controllable: record?.controllable,
-            metadataEnabled: record?.metadataEnabled,
-          });
-        });
-      },
-      selectInput: (zoneId, inputId) => {
-        const input = options.lineInActivationService.findLineInInput(inputId);
-        if (!input) {
-          return false;
-        }
-        // Pass the resolved name and icon: the service would otherwise look them up again,
-        // and its no-signal fallback is aimed at the Loxone client rather than at us.
-        options.lineInActivationService.activateLineIn(zoneId, inputId, {
-          title: input.name,
-          iconType: input.iconType,
-        });
-        return true;
-      },
-      playAlert: async (request) => {
-        if (!options.zoneManager.getZoneState(request.zoneId)) {
-          return null;
-        }
-        // handleGroupedAlert covers the single-zone case too: it takes the leader plus the
-        // full target list, and one zone is simply a group of one.
-        return options.alerts.handleGroupedAlert(
-          request.zoneId,
-          request.type,
-          request.action,
-          request.zones,
-          request.text,
-          request.language,
-          request.volume,
-        );
-      },
-      getZoneCover: (zoneId, targetSize) => {
-        const session = options.audioManager.getSession(zoneId);
-        // Inline bytes win: embedded artwork has no url to hand out.
-        if (session?.cover) {
-          return session.cover;
-        }
-        const state = options.zoneManager.getZoneState(zoneId);
-        const source = state?.coverurl?.trim() || '';
-        if (!source) {
-          return null;
-        }
-        // Ask the provider for the requested size where it supports variants; otherwise
-        // this returns the url unchanged.
-        const sized = resizeCoverUrl(source, targetSize);
-        return source.includes('tunein.com') ? resizeTuneInCoverUrl(sized, targetSize) : sized;
-      },
-      getQueue: (zoneId, start, limit) => {
-        if (!options.zoneManager.getZoneState(zoneId)) {
-          return null;
-        }
-        return toApiQueue(zoneId, options.zoneManager.getRawQueue(zoneId, start, limit));
-      },
-      queueAppend: async (zoneId, uri) => {
-        await options.zoneManager.queue.appendUri(zoneId, resolveUriFromRef(uri));
-      },
-      queueInsertNext: async (zoneId, uri) => {
-        await options.zoneManager.queue.insertUriAfterCurrent(zoneId, resolveUriFromRef(uri));
-      },
-      queuePlay: (zoneId, itemId) => {
-        if (!options.zoneManager.queue.seekInQueue(zoneId, itemId)) {
-          return false;
-        }
-        options.zoneManager.handleCommand(zoneId, 'queueplaycurrent');
-        return true;
-      },
-      queueMove: (zoneId, itemId, beforeId) =>
-        options.zoneManager.queue.moveBeforeUniqueId(zoneId, itemId, beforeId ?? 'end'),
-      queueRemove: (zoneId, itemId) => options.zoneManager.queue.removeByUniqueId(zoneId, itemId),
-      queueClear: (zoneId) => options.zoneManager.queue.clear(zoneId),
-      queueUndo: (zoneId) => options.zoneManager.queue.undo(zoneId),
-      handoff: (sourceId, targetId) => options.zoneManager.handoff(sourceId, targetId),
-      listAudioServers: () => buildPublicAudioServersList(options.configPort, options.sonnCorePeers),
-      getFavorites: async (zoneId, start, limit) => {
-        if (!options.zoneManager.getZoneState(zoneId)) {
-          return null;
-        }
-        return toApiFavorites(
-          zoneId,
-          await options.favoritesManager.get(zoneId, start, limit),
-          options.contentManager.getBridgeRegistry(),
-        );
-      },
-      addFavorite: async (zoneId, name, uri) => {
-        // A browse row hands out an opaque ref, and the guide promises it works anywhere a
-        // `uri` is taken. Store the audiopath it means, exactly as `play` does: an unresolved
-        // ref has no metadata to look up and cannot be played back later either.
-        const created = await options.favoritesManager.add(zoneId, name, resolveUriFromRef(uri));
-        return {
-          id: created.id,
-          name: created.name || created.title || '',
-          source: created.audiopath ?? '',
-          coverUrl: created.coverurl ?? '',
-        };
-      },
-      renameFavorite: async (zoneId, id, name) => {
-        await options.favoritesManager.setName(zoneId, id, name);
-      },
-      removeFavorite: async (zoneId, id) => {
-        await options.favoritesManager.remove(zoneId, id);
-      },
-      reorderFavorites: async (zoneId, ids) => {
-        await options.favoritesManager.reorder(zoneId, ids);
-      },
-      playFavorite: async (zoneId, id) => {
-        const uri = await options.favoritesManager.getAudiopathForFavorite(zoneId, id);
-        if (!uri) {
-          return false;
-        }
-        // Resolve on the way out too, so favourites stored as a browse ref before that was
-        // fixed still play instead of being handed to the queue as gibberish.
-        await options.zoneManager.playContent(zoneId, resolveUriFromRef(uri), 'api');
-        return true;
-      },
-      getRecents: async (zoneId, start, limit) => {
-        if (!options.zoneManager.getZoneState(zoneId)) {
-          return null;
-        }
-        return toApiRecents(
-          zoneId,
-          await options.recentsManager.get(zoneId),
-          start,
-          limit,
-          options.contentManager.getBridgeRegistry(),
-          options.zoneManager.getZoneState(zoneId)?.name ?? '',
-        );
-      },
-      setGroup: (zoneId, members) => {
-        if (!options.zoneManager.getZoneState(zoneId)) {
-          return null;
-        }
-        // Empty list means "leave the group"; there is no separate verb for it.
-        if (members.length === 0) {
-          options.groupManager.removeGroup(zoneId);
-          return { leader: zoneId, members: [], rejected: [] };
-        }
-        // Same rule the Loxone path applies: grouping mirrors frames between outputs of
-        // one protocol, so a member on another cannot join unless mixed groups are on.
-        const mixedAllowed = options.configPort.getConfig().groups?.mixedGroupEnabled === true;
-        const protocolOf = (id: number) => options.resolveOutputProtocol(id);
-        const leaderProtocol = protocolOf(zoneId);
-        const rejected: ApiGroupResult['rejected'] = [];
-        const accepted: number[] = [];
-        for (const id of members) {
-          if (id === zoneId) continue;
-          if (!options.zoneManager.getZoneState(id)) {
-            rejected.push({ id, reason: 'zone-not-found' });
-            continue;
-          }
-          if (!mixedAllowed && protocolOf(id) !== leaderProtocol) {
-            rejected.push({ id, reason: 'protocol-mismatch' });
-            continue;
-          }
-          accepted.push(id);
-        }
-        const finalMembers = [zoneId, ...accepted];
-        options.groupManager.upsert({
-          leader: zoneId,
-          members: finalMembers,
-          backend: 'Unknown',
-          source: 'manual',
-          externalId: `group-${zoneId}`,
-        });
-        return { leader: zoneId, members: finalMembers, rejected };
-      },
-      clearRecents: async (zoneId) => {
-        await options.recentsManager.clear(zoneId);
-      },
-      getServiceLabel: (audiopath) => options.resolveServiceLabel(audiopath),
-      getInputLabel: (inputId) => options.resolveInputLabel(inputId),
-      getStreamFormat: (zoneId) => options.resolveStreamFormat(zoneId),
-      getEqualizerBands: (zoneId) => {
-        const zone = options.configPort.getConfig().zones?.find((z) => z.id === zoneId);
-        return zone ? [...getZoneEqualizerBands(zone)] : null;
-      },
-      setEqualizerBands: async (zoneId, bands) => {
-        const updated = await options.zoneManager.setEqualizerBands(zoneId, bands);
-        return updated ? [...updated.bands] : null;
-      },
-      serverVersion: options.serverVersion,
-      startedAt: Date.now(),
-    });
+    this.api = new ApiHandler(
+      createApiHandlerDeps(options, {
+        browse: this.browseService,
+        about: this.aboutService,
+        destinations: this.destinationService,
+      }),
+    );
     this.beoremoteApi = new BeoremoteApiHandler({
       configPort: options.configPort,
       favorites: options.favoritesManager,
@@ -512,48 +134,13 @@ export class HttpService {
       zoneManager: options.zoneManager,
       lineIn: options.lineInActivationService,
     });
-    this.adminApi = new AdminApiHandler({
-      onReinitialize: options.onReinitialize,
-      onSoftRestart: options.onSoftRestart,
-      onLoxoneToggle: options.onLoxoneToggle,
-      notifier: options.notifier,
-      loxoneNotifier: options.loxoneNotifier,
-      spotifyManagerProvider: options.spotifyManagerProvider,
-      customRadioStore: options.customRadioStore,
-      zoneManager: options.zoneManager,
-      configPort: options.configPort,
-      spotifyInputService: options.spotifyInputService,
-      sendspinLineInService: options.sendspinLineInService,
-      // Start/stop the DLNA advertisement to match its enabled flag, so the Access
-      // toggle takes effect at runtime instead of only on the next boot.
-      syncMediaServer: async () => {
-        const ms = options.mediaServer;
-        if (!ms) return;
-        if (ms.isEnabled()) await ms.start();
-        else await ms.stop();
-      },
-      // Same idea for MQTT: connect, disconnect or reconnect to match the saved config
-      // so a broker change applies without a restart.
-      mqttPublisher: options.mqttPublisher,
-      musicAssistantStreamService: options.musicAssistantStreamService,
-      // Lets the admin UI's drop zone write through the same streaming path the
-      // WebDAV share uses, instead of its own base64 endpoint.
-      webdav: options.webdav,
-      snapcastCore: options.snapcastCore,
-      squeezeliteCore: options.squeezeliteCore,
-      recentsManager: options.recentsManager,
-      favoritesManager: options.favoritesManager,
-      groupManager: options.groupManager,
-      contentManager: options.contentManager,
-      audioManager: options.audioManager,
-      zoneAudioPrefs: options.zoneAudioPrefs,
-      mdnsPort: options.mdnsPort,
-      sonnCorePeers: options.sonnCorePeers,
-      alertFiles: options.alertFiles,
-      sonnClientApi: this.sonnClientApi,
-      beoremoteApi: this.beoremoteApi,
-      httpPort: config.port,
-    });
+    this.adminApi = new AdminApiHandler(
+      createAdminApiDeps(options, {
+        sonnClientApi: this.sonnClientApi,
+        beoremoteApi: this.beoremoteApi,
+        httpPort: config.port,
+      }),
+    );
     this.music = new MusicStreamingHandler(config.musicDir);
     this.staticFiles = new StaticFileHandler(config.publicDir);
     this.audioStream = new AudioStreamHandler(
@@ -911,17 +498,4 @@ export class HttpService {
       return path || '/';
     }
   }
-}
-
-function toApiPlaylist(playlist: { id: string; name: string; tracks: number; audiopath: string; coverurl?: string }): ApiPlaylist {
-  return {
-    id: encodeContainerRef({
-      kind: 'playlist',
-      service: 'library',
-      folderId: playlist.audiopath,
-    }),
-    name: playlist.name,
-    tracks: playlist.tracks,
-    ...(playlist.coverurl ? { coverUrl: playlist.coverurl } : {}),
-  };
 }
