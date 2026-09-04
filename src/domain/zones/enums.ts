@@ -51,19 +51,40 @@ export enum RepeatMode {
   Track = 3,
 }
 
-/** Kind of media object currently addressed (file, playlist, favourite, ...). */
+/**
+ * Kind of media object currently addressed, and how the client renders a browse row.
+ *
+ * Read off the client's own `FileType` in `data/refcode/www/scripts/legacy/comps.js`, which is
+ * the only authority on these numbers — the values below match it exactly.
+ *
+ * Four of them describe the same *thing* and differ only in the affordance the row gets, which
+ * is why `ContentItemKind` cannot derive them: a playlist is `Playlist`, `PlaylistBrowsable`,
+ * `PlaylistEditable` or `PlaylistFollowable` depending on whether the app may open it, edit it
+ * or offer a follow toggle. `PlaylistBrowsable` is the safe default for a container that says
+ * nothing more.
+ */
 export enum FileType {
   Unknown = 0,
   Folder = 1,
+  /** A directly playable item: a track, a radio station, a podcast episode. */
   File = 2,
   Playlist = 3,
   Favorite = 4,
   SpotifyConnect = 5,
   LineIn = 6,
+  /** A container the app may open. The default for album, artist, playlist, show, category. */
   PlaylistBrowsable = 7,
   Search = 8,
   PlaylistEditable = 11,
-  PlaylistFollowable = 13,
+  /**
+   * A container the app draws a follow toggle on.
+   *
+   * 12, not 13: this was declared as 13 here, a value the client's enum does not have at all.
+   * Nothing read the name — every producer writes the literal `12` — so the wire was right and
+   * only this declaration was wrong, but anyone reaching for the name would have emitted an
+   * item the app cannot classify.
+   */
+  PlaylistFollowable = 12,
 }
 
 /** Icon to display for line-in sources within the client UI. */

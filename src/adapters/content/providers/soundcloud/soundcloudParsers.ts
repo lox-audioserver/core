@@ -62,7 +62,7 @@ export function mapTrack(providerId: string, track: SoundCloudTrack): ContentFol
     album: track.publisher_metadata?.album_title?.trim() || '',
     coverurl: cover,
     thumbnail: cover,
-    type: FileType.File,
+    kind: 'track',
     tag: 'track',
     // SoundCloud durations are milliseconds; Loxone expects seconds.
     duration: typeof track.duration === 'number' ? Math.round(track.duration / 1000) : undefined,
@@ -83,7 +83,7 @@ export function mapArtist(providerId: string, user: SoundCloudUser): ContentFold
     artist: name,
     coverurl: cover,
     thumbnail: cover,
-    type: FileType.PlaylistBrowsable,
+    kind: 'artist',
     tag: 'artist',
     provider: 'soundcloud',
   };
@@ -105,7 +105,7 @@ export function mapPlaylist(providerId: string, playlist: SoundCloudPlaylist): C
     owner_id: owner,
     coverurl: cover,
     thumbnail: cover,
-    type: FileType.PlaylistBrowsable,
+    kind: 'playlist',
     tag: 'playlist',
     provider: 'soundcloud',
   };

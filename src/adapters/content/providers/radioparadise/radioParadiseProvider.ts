@@ -1,5 +1,4 @@
 import type { ContentFolder, ContentFolderItem, RadioMenuEntry } from '@/ports/ContentTypes';
-import { FileType } from '@/domain/zones/enums';
 import {
   RADIO_PARADISE_ICON_BASE_URL,
   RADIO_PARADISE_STATIONS,
@@ -56,7 +55,7 @@ export class RadioParadiseProvider {
         id: station.id,
         name: station.name,
         title: station.name,
-        type: FileType.File,
+        kind: 'radio',
         audiopath: `radioparadise:${station.id}`,
         coverurl: cover,
         thumbnail: cover,

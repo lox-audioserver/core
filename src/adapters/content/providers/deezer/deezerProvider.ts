@@ -357,7 +357,7 @@ export class DeezerProvider implements ContentProvider {
       album,
       coverurl: cover,
       thumbnail: cover,
-      type: FileType.File,
+      kind: 'track',
       tag: 'track',
       duration: typeof track?.duration === 'number' ? track.duration : undefined,
       hasCover: !!cover,
@@ -378,7 +378,7 @@ export class DeezerProvider implements ContentProvider {
       artist,
       coverurl: cover,
       thumbnail: cover,
-      type: FileType.PlaylistBrowsable,
+      kind: 'album',
       tag: 'album',
       provider: 'deezer',
     };
@@ -396,7 +396,7 @@ export class DeezerProvider implements ContentProvider {
       artist: name,
       coverurl: cover,
       thumbnail: cover,
-      type: FileType.PlaylistBrowsable,
+      kind: 'artist',
       tag: 'artist',
       provider: 'deezer',
     };
@@ -416,7 +416,7 @@ export class DeezerProvider implements ContentProvider {
       owner_id: owner,
       coverurl: cover,
       thumbnail: cover,
-      type: FileType.PlaylistBrowsable,
+      kind: 'playlist',
       tag: 'playlist',
       provider: 'deezer',
     };

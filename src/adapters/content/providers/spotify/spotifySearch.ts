@@ -90,7 +90,7 @@ export async function searchSpotifyAccount(
       duration: typeof track?.duration_ms === 'number' ? Math.round(track.duration_ms / 1000) : undefined,
       hasCover: !!cover,
       owner: album || undefined,
-      type: 2,
+      kind: 'track',
       tag: 'track',
     };
   };
@@ -114,7 +114,7 @@ export async function searchSpotifyAccount(
       coverurl: cover,
       thumbnail: cover,
       artist: artists,
-      type: 7,
+      kind: 'album',
       tag: 'album',
     };
   };
@@ -132,7 +132,7 @@ export async function searchSpotifyAccount(
       coverurl: cover,
       thumbnail: cover,
       artist: name,
-      type: 7,
+      kind: 'artist',
       tag: 'artist',
     };
   };
@@ -152,7 +152,7 @@ export async function searchSpotifyAccount(
       artist: '',
       owner: playlist?.owner?.display_name || playlist?.owner?.id || '',
       owner_id: playlist?.owner?.id || '',
-      type: 7,
+      kind: 'playlist',
       tag: 'playlist',
     };
   };
@@ -171,7 +171,7 @@ export async function searchSpotifyAccount(
       coverurl: cover,
       thumbnail: cover,
       artist: publisher,
-      type: 7,
+      kind: 'show',
       tag: 'show',
     };
   };
@@ -194,7 +194,7 @@ export async function searchSpotifyAccount(
       thumbnail: cover,
       artist: showName,
       album: showName,
-      type: 2,
+      kind: 'episode',
       tag: 'episode',
     };
   };

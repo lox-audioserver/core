@@ -3,12 +3,6 @@ import { createLogger } from '@/shared/logging/logger';
 import { DEFAULT_MIN_SEARCH_LIMIT } from '@/adapters/content/utils/searchLimits';
 import type { ContentProvider, ProviderSearchCategories, ProviderSearchResult } from '@/adapters/content/ContentProvider';
 
-const enum FileType {
-  Folder = 1,
-  File = 2,
-  PlaylistBrowsable = 7,
-}
-
 const TIDAL_API_BASE = 'https://api.tidal.com/v1';
 
 interface TidalProviderOptions {
@@ -251,7 +245,7 @@ export class TidalProvider implements ContentProvider {
       album,
       coverurl: cover,
       thumbnail: cover,
-      type: FileType.File,
+      kind: 'track',
       tag: 'track',
       duration: typeof track?.duration === 'number' ? track.duration : undefined,
       hasCover: !!cover,
@@ -272,7 +266,7 @@ export class TidalProvider implements ContentProvider {
       artist,
       coverurl: cover,
       thumbnail: cover,
-      type: FileType.PlaylistBrowsable,
+      kind: 'album',
       tag: 'album',
       provider: 'tidal',
     };
@@ -290,7 +284,7 @@ export class TidalProvider implements ContentProvider {
       artist: name,
       coverurl: cover,
       thumbnail: cover,
-      type: FileType.PlaylistBrowsable,
+      kind: 'artist',
       tag: 'artist',
       provider: 'tidal',
     };
@@ -310,7 +304,7 @@ export class TidalProvider implements ContentProvider {
       owner_id: owner,
       coverurl: cover,
       thumbnail: cover,
-      type: FileType.PlaylistBrowsable,
+      kind: 'playlist',
       tag: 'playlist',
       provider: 'tidal',
     };

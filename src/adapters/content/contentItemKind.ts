@@ -14,7 +14,14 @@ import type { ContentItemKind } from '@/domain/media/contentKind';
  * 'folder', and `ContentFolderItem.nas` already carries that distinction.
  */
 
-/** Loxone FileType for a directly playable file. */
+/**
+ * Loxone FileType for a directly playable file.
+ *
+ * Still read here, and load-bearing: the local library tags a row by where it lives ('nas',
+ * 'sd') for both its folders and its tracks, and both carry an audiopath. `type` is the only
+ * thing that tells those two apart, so a storage-tagged row that drops it becomes a folder.
+ * A provider migrating off `type` has to state `kind` instead — the number cannot simply go.
+ */
 const FILE_TYPE_TRACK = 2;
 
 const TAG_TO_KIND: Record<string, ContentItemKind> = {

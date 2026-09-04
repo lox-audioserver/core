@@ -19,7 +19,16 @@ export interface ContentServiceEntry {
 export interface ContentFolderItem {
   id: string;
   name: string;
-  type: number;
+  /**
+   * Loxone's `FileType` for this row, when the producer states one.
+   *
+   * Optional because it is a rendering decision for one consumer, not a property of the item:
+   * a provider that says nothing here has its `type` derived from {@link kind} in the Loxone
+   * adapter (see `deriveLoxoneFileType`). Stating it is what a producer does when it needs an
+   * affordance `kind` cannot express — a follow toggle (`PlaylistFollowable`), an editable
+   * playlist, a favourite, a search row — and those are the only reasons left to set it.
+   */
+  type?: number;
   audiopath?: string;
   coverurl?: string;
   /** Optional Apple motion-artwork video URL for clients that support it. */

@@ -282,13 +282,12 @@ export class ContentManager {
       const menu = await this.getRadios();
       const items: ContentFolderItem[] = [];
       if (this.isRadioParadiseEnabled()) {
-        items.push({ id: 'radioparadise', name: 'Radio Paradise', type: 7, kind: 'category' });
+        items.push({ id: 'radioparadise', name: 'Radio Paradise', kind: 'category' });
       }
       items.push(
         ...menu.map((entry) => ({
           id: entry.cmd === 'local' ? 'tunein' : entry.cmd,
           name: entry.name,
-          type: 7,
           kind: 'category' as const,
         })),
       );
@@ -807,7 +806,6 @@ export class ContentManager {
       return {
         id,
         name: playlist.name,
-        type: 7,
         kind: 'playlist',
         audiopath: id,
         coverurl: playlist.coverurl || undefined,

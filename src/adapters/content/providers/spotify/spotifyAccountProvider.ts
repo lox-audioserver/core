@@ -1278,7 +1278,7 @@ export class SpotifyAccountProvider implements ContentProvider {
       id: this.makeUri('episode', id),
       name,
       title: name,
-      type: FileType.File,
+      kind: 'episode',
       coverurl: cover,
       thumbnail:
         this.extractImage(episode?.images, 1) ??
@@ -1362,7 +1362,7 @@ export class SpotifyAccountProvider implements ContentProvider {
       id: this.makeUri('track', id),
       name: String(track?.name ?? 'Track'),
       title: String(track?.name ?? 'Track'),
-      type: FileType.File,
+      kind: 'track',
       coverurl: cover,
       thumbnail: this.extractImage(coverImages, 1) ?? cover,
       audiopath: this.makeUri('track', id),

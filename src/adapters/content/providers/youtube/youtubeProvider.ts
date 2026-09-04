@@ -384,7 +384,7 @@ export class YoutubeProvider implements ContentProvider {
       id: audiopath, audiopath, name: title, title,
       artist: String(entry?.channel ?? entry?.uploader ?? '').trim(),
       album: '', coverurl: thumb, thumbnail: thumb,
-      type: FileType.File, tag: 'track', duration, hasCover: !!thumb, provider: 'youtube',
+      kind: 'track', tag: 'track', duration, hasCover: !!thumb, provider: 'youtube',
     };
   }
 
@@ -398,7 +398,7 @@ export class YoutubeProvider implements ContentProvider {
       id: audiopath, audiopath, name: title, title,
       artist: String(data?.uploader ?? data?.channel ?? ''),
       album: '', coverurl: thumb, thumbnail: thumb,
-      type: FileType.File, tag: 'track', duration, hasCover: !!thumb, provider: 'youtube',
+      kind: 'track', tag: 'track', duration, hasCover: !!thumb, provider: 'youtube',
     };
   }
 
@@ -410,7 +410,7 @@ export class YoutubeProvider implements ContentProvider {
       id: audiopath, audiopath, name: entry.title, title: entry.title,
       artist: entry.channelTitle, album: '',
       coverurl: thumb, thumbnail: thumb,
-      type: FileType.File, tag: 'track', hasCover: !!thumb, provider: 'youtube',
+      kind: 'track', tag: 'track', hasCover: !!thumb, provider: 'youtube',
     };
   }
 
