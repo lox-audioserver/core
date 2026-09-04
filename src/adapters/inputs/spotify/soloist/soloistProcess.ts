@@ -321,6 +321,15 @@ const VERSION_RE = /^soloist ([^\s]+)/im;
 const BUILD_STAMP_RE = /\bbuild (\d{10})\b/;
 /** Soloist exits with 10 when its build has passed the 90-day mark. Worth naming, not guessing. */
 export const SOLOIST_EXIT_EXPIRED = 10;
+/**
+ * How much audio a store may keep, in MB.
+ *
+ * Stated for every run, because Soloist's own default is no limit at all: a room that has been
+ * played through for a year has a year of audio in its cache, on whatever disk this server was
+ * installed on. 512 is enough that a track put on twice does not fetch twice and small enough that
+ * a dozen rooms cannot fill a card. The floor Soloist accepts is 100.
+ */
+const CACHE_LIMIT_MB = '512';
 
 export async function probeBinary(): Promise<SoloistBinaryStatus> {
   const binary = soloistBinaryPath();
@@ -424,6 +433,15 @@ export type SoloistRunHandle = {
  * room belongs to whoever took it last, and the next person takes it from them the same way. It
  * never plays this server's queue; that is what {@link startSingleTrack} is for.
  */
+/**
+ * A note on the key, which every argument list below carries.
+ *
+ * Soloist takes it only as `--api-key`: there is no environment variable and no file it will read
+ * one from, so it is visible in `/proc/<pid>/cmdline` to any local user for as long as a room is
+ * up. Nothing here writes it anywhere else — not to a log, not to a unit, not into the diagnostics
+ * the admin screen can export — and outside the process table it stays in the config. HiFiBerry's
+ * own wrapper documents the same exposure as an accepted risk for the same reason.
+ */
 export function startPersistent(params: {
   zoneId: number;
   apiKey: string;
@@ -446,6 +464,9 @@ export function startPersistent(params: {
     // both files and answers on it, which is measurable, so we name the port and skip the
     // discovery. Zones still cannot collide: each one is handed a free port before it starts.
     '-w', `127.0.0.1:${wsPort}`,
+    // A room's daemon caches whatever the app plays through it, for as long as the room exists —
+    // which with Soloist's default of no limit is everything, forever.
+    '-z', CACHE_LIMIT_MB,
     // The level this device advertises in the Spotify app until the room says otherwise, which it
     // does as soon as the daemon has signed in. A label rather than a taper: Soloist applies no
     // volume itself but passes it to the sound server, and ours records the level and hands the
@@ -485,7 +506,7 @@ export function startSingleTrack(params: {
     '-D', store.data,
     '-C', store.cache,
     // Bounded rather than the default of no limit: this store is written to on every track.
-    '-z', '512',
+    '-z', CACHE_LIMIT_MB,
     '-w', `127.0.0.1:${wsPort}`,
     // Nothing advertises this run, so the number is never seen by anybody; full scale is simply
     // what it is true to say about a run that attenuates nothing.
