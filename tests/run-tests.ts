@@ -58,6 +58,7 @@ import './ytMusicAdminRoutes.test';
 import './integrationAdminRoutes.test';
 import './sendspinGroupController.test';
 import './timedFrameScheduler.test';
+import './appleMusicStreamHelpers.test';
 import './audioServersAndBearer.test';
 import './outputFactory.airplay.test';
 import './outputFactory.sendspin.test';

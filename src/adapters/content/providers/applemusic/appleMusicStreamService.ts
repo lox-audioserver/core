@@ -5,6 +5,17 @@ import type { StreamingServiceConfig } from '@/domain/config/types';
 import type { PlaybackSource } from '@/ports/EngineTypes';
 import { decodeAudiopath, parseServiceNativeAudiopath } from '@/domain/zones/audiopath';
 import { slugFromBridgeId } from '@/domain/media/serviceIdentity';
+import {
+  asId,
+  buildDrmCacheKey,
+  buildLicenseHeaders,
+  buildStreamHeaders,
+  extractStreamUrl,
+  normalizeLicenseUrl,
+  normalizeSalableAdamId,
+  resolvePaceInput,
+  sanitizeProxyHeaders,
+} from '@/adapters/content/providers/applemusic/appleMusicStreamHelpers';
 import Widevine, { LicenseType as WvLicenseType } from 'widevine';
 import {
   loadWidevineArtifacts,
@@ -194,7 +205,7 @@ export class AppleMusicStreamService {
       headers = await this.buildAuthHeaders(request.bridge);
       webPlayback = await this.fetchWebPlayback(headers, request.trackId, request.isLibrary);
     }
-    let streamUrl = this.extractStreamUrl(webPlayback);
+    let streamUrl = extractStreamUrl(webPlayback);
     let drmTrackId = request.trackId;
     let drmIsLibrary = request.isLibrary;
     let failureReason = '';
@@ -216,7 +227,7 @@ export class AppleMusicStreamService {
       // library asset often does not. resolvePlayableCatalog walks the stored catalogId, the live
       // catalog relationship, and finally an exact metadata search (music-assistant #4109) so a
       // deprecated/pulled catalog version is transparently replaced by the current one.
-      const librarySongId = webPlayback && !webPlayback.__error ? this.asId(webPlayback.songId) : undefined;
+      const librarySongId = webPlayback && !webPlayback.__error ? asId(webPlayback.songId) : undefined;
       const resolved = await this.resolvePlayableCatalog(headers, request.bridge, request.trackId, librarySongId);
       if (resolved) {
         this.log.info('apple music library using catalog playback for drm', {
@@ -345,7 +356,7 @@ export class AppleMusicStreamService {
     trackId: string,
     isLibrary: boolean,
   ): Promise<any | null> {
-    const normalizedTrackId = isLibrary ? trackId : this.normalizeSalableAdamId(trackId);
+    const normalizedTrackId = isLibrary ? trackId : normalizeSalableAdamId(trackId);
     const payload: Record<string, any> = {
       'user-initiated': true,
     };
@@ -425,34 +436,6 @@ export class AppleMusicStreamService {
     return null;
   }
 
-  private normalizeSalableAdamId(trackId: string): string {
-    const trimmed = trackId.trim();
-    const match = trimmed.match(/^[a-z]\.(\d+)$/i);
-    if (match && match[1]) {
-      return match[1];
-    }
-    return trimmed;
-  }
-
-  private extractStreamUrl(info: any): string | null {
-    const candidates: Array<string | undefined> = [
-      info?.hlsUrl,
-      info?.hlsURL,
-      info?.streamUrl,
-      info?.streamURL,
-      info?.url,
-      info?.assetUrl,
-      info?.assets?.[0]?.url,
-      info?.assets?.[0]?.URL,
-      info?.assets?.find((asset: any) => typeof asset?.url === 'string')?.url,
-      info?.streams?.hls?.url,
-      info?.streams?.hls?.[0]?.url,
-    ];
-    const match = candidates.find((value) => typeof value === 'string' && value.length > 0);
-    return match ?? null;
-  }
-
-
   private async detectDrm(streamUrl: string, headers: Record<string, string>): Promise<boolean> {
     const playlist = await this.fetchText(streamUrl, headers);
     if (!playlist) return false;
@@ -512,7 +495,7 @@ export class AppleMusicStreamService {
       return { playbackSource: await this.buildStreamPlaybackSource(playbackUrl, headers, bridge) };
     }
 
-    const licenseUrl = this.normalizeLicenseUrl(webPlayback?.['hls-key-server-url']);
+    const licenseUrl = normalizeLicenseUrl(webPlayback?.['hls-key-server-url']);
     if (!licenseUrl) {
       this.log.warn('Apple Music DRM: missing license URL in playback metadata', { trackId, isLibrary });
       return null;
@@ -545,7 +528,7 @@ export class AppleMusicStreamService {
     trackId: string,
     isLibrary: boolean,
   ): Promise<DrmKeyResult> {
-    const cacheKey = this.buildDrmCacheKey(trackId, isLibrary);
+    const cacheKey = buildDrmCacheKey(trackId, isLibrary);
     const now = Date.now();
     const cached = this.drmKeyCache.get(cacheKey);
     if (cached?.key && cached.expiresAt > now) {
@@ -663,7 +646,7 @@ export class AppleMusicStreamService {
       };
 
       this.log.debug('Apple Music DRM: requesting license', { licenseUrl });
-      const licenseHeaders = this.buildLicenseHeaders(headers);
+      const licenseHeaders = buildLicenseHeaders(headers);
       const licenseRes = await fetch(licenseUrl, {
         method: 'POST',
         headers: licenseHeaders,
@@ -752,10 +735,6 @@ export class AppleMusicStreamService {
     }
   }
 
-  private buildDrmCacheKey(trackId: string, isLibrary: boolean): string {
-    return `${isLibrary ? 'library' : 'catalog'}:${trackId}`;
-  }
-
   private async findKeyUriFromAssets(
     webPlayback: any,
     headers: Record<string, string>,
@@ -783,34 +762,13 @@ export class AppleMusicStreamService {
     return findPsshKeyUri(playlist);
   }
 
-  private buildStreamHeaders(headers: Record<string, string>): Record<string, string> | undefined {
-    const allowlist = new Set([
-      'authorization',
-      'media-user-token',
-      'music-user-token',
-      'user-agent',
-      'accept',
-      'accept-language',
-      'origin',
-      'referer',
-    ]);
-    const filtered: Record<string, string> = {};
-    for (const [key, value] of Object.entries(headers)) {
-      if (!value) continue;
-      if (allowlist.has(key.toLowerCase())) {
-        filtered[key] = value;
-      }
-    }
-    return Object.keys(filtered).length ? filtered : undefined;
-  }
-
   private async buildStreamPlaybackSource(
     streamUrl: string,
     headers: Record<string, string>,
     bridge: StreamingServiceConfig,
     decryptionKey?: string,
   ): Promise<PlaybackSource> {
-    const streamHeaders = this.buildStreamHeaders(headers);
+    const streamHeaders = buildStreamHeaders(headers);
     if (isHlsUrl(streamUrl)) {
       return this.buildProxyPlaybackSource(streamUrl, streamHeaders, bridge, decryptionKey);
     }
@@ -831,7 +789,7 @@ export class AppleMusicStreamService {
     // so leave the format unset and let ffmpeg auto-detect the container.
     const inputFormat = decryptionKey ? 'mov' : undefined;
     await this.logInputDetails('proxy', streamUrl, headers, inputFormat, sessionId);
-    const realTime = this.resolvePaceInput(bridge);
+    const realTime = resolvePaceInput(bridge);
     if (!realTime) {
       this.log.info('Apple Music pacing disabled (proxy direct)', { inputFormat, sessionId });
     }
@@ -885,7 +843,7 @@ export class AppleMusicStreamService {
     const { host, port, sessionId } = await this.ensureProxySession(streamUrl, headers, decryptionKey);
     const url = `http://${host}:${port}/applemusic/${sessionId}/playlist.m3u8`;
     await this.logInputDetails('proxy', streamUrl, headers, 'hls', sessionId);
-    const realTime = this.resolvePaceInput(bridge);
+    const realTime = resolvePaceInput(bridge);
     if (!realTime) {
       this.log.info('Apple Music pacing disabled (proxy)', { inputFormat: 'hls', sessionId });
     }
@@ -898,15 +856,6 @@ export class AppleMusicStreamService {
       lowLatency: false,
       nativeFormat: APPLE_MUSIC_NATIVE_FORMAT,
     };
-  }
-
-  private resolvePaceInput(bridge: StreamingServiceConfig): boolean {
-    if (typeof bridge.appleMusicPaceInput === 'boolean') {
-      return bridge.appleMusicPaceInput;
-    }
-    // Default to unpaced input for faster startup; the engine will apply bounded output pacing
-    // when needed to avoid running finite sources ahead of wall clock.
-    return false;
   }
 
   private async logInputDetails(
@@ -1134,7 +1083,7 @@ export class AppleMusicStreamService {
     res.on('close', cleanup);
     res.on('finish', cleanup);
     try {
-      const upstreamHeaders = this.sanitizeProxyHeaders(targetUrl, headers);
+      const upstreamHeaders = sanitizeProxyHeaders(targetUrl, headers);
       const response = await fetch(
         targetUrl,
         upstreamHeaders
@@ -1261,7 +1210,7 @@ export class AppleMusicStreamService {
     res: ServerResponse,
   ): Promise<boolean> {
     try {
-      const upstreamHeaders = this.sanitizeProxyHeaders(targetUrl, headers);
+      const upstreamHeaders = sanitizeProxyHeaders(targetUrl, headers);
       const response = await fetch(
         targetUrl,
         upstreamHeaders
@@ -1291,33 +1240,6 @@ export class AppleMusicStreamService {
     }
   }
 
-  private sanitizeProxyHeaders(
-    targetUrl: string,
-    headers?: Record<string, string>,
-  ): Record<string, string> | undefined {
-    if (!headers) {
-      return headers;
-    }
-    let host = '';
-    try {
-      host = new URL(targetUrl).hostname.toLowerCase();
-    } catch {
-      host = '';
-    }
-    const sanitized = { ...headers };
-    delete (sanitized as Record<string, string>).Host;
-    delete (sanitized as Record<string, string>).host;
-    if (host.endsWith('blobstore.apple.com')) {
-      delete (sanitized as Record<string, string>).authorization;
-      delete (sanitized as Record<string, string>).Authorization;
-      delete (sanitized as Record<string, string>)['Music-User-Token'];
-      delete (sanitized as Record<string, string>)['Media-User-Token'];
-      delete (sanitized as Record<string, string>).origin;
-      delete (sanitized as Record<string, string>).referer;
-    }
-    return sanitized;
-  }
-
   private pruneProxySessions(): void {
     pruneExpiredSessions(this.proxySessions);
   }
@@ -1330,36 +1252,6 @@ export class AppleMusicStreamService {
         this.drmKeyCache.delete(key);
       }
     }
-  }
-
-  private buildLicenseHeaders(headers: Record<string, string>): Record<string, string> {
-    const token =
-      headers['media-user-token'] ??
-      headers['music-user-token'] ??
-      headers['Media-User-Token'] ??
-      headers['Music-User-Token'];
-    const ua = headers['user-agent'] ?? headers['User-Agent'];
-    const auth = headers.authorization ?? headers.Authorization;
-    const payload: Record<string, string> = {
-      connection: 'keep-alive',
-      accept: 'application/json',
-      origin: 'https://music.apple.com',
-      referer: 'https://music.apple.com/',
-      'accept-encoding': 'gzip, deflate, br',
-      'content-type': 'application/json;charset=utf-8',
-    };
-    if (ua) payload['user-agent'] = ua;
-    if (auth) payload.authorization = auth;
-    if (token) payload['media-user-token'] = token;
-    return payload;
-  }
-
-  private normalizeLicenseUrl(url?: string): string | null {
-    if (!url) return null;
-    if (url.includes('play.itunes.apple.com')) {
-      return url.replace('play.itunes.apple.com', 'play.music.apple.com');
-    }
-    return url;
   }
 
   /**
@@ -1430,7 +1322,7 @@ export class AppleMusicStreamService {
       via: 'songId' | 'playParams' | 'relationship' | 'search',
     ): Promise<{ catalogId: string; webPlayback: any; streamUrl: string; via: typeof via } | null> => {
       const playback = await this.fetchWebPlayback(headers, catalogId, false);
-      const streamUrl = this.extractStreamUrl(playback);
+      const streamUrl = extractStreamUrl(playback);
       if (playback && streamUrl) return { catalogId, webPlayback: playback, streamUrl, via };
       return null;
     };
@@ -1547,11 +1439,6 @@ export class AppleMusicStreamService {
   }
 
   /** Coerce an Apple id (number or string) to a non-empty string, or undefined. */
-  private asId(value: unknown): string | undefined {
-    if (value === undefined || value === null) return undefined;
-    const s = String(value).trim();
-    return s.length ? s : undefined;
-  }
 
   private async ensureStorefront(
     headers: Record<string, string>,
