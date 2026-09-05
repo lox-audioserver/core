@@ -2,7 +2,8 @@ import { createLogger } from '@/shared/logging/logger';
 import type { ConfigPort } from '@/ports/ConfigPort';
 import type { StreamingServiceConfig } from '@/domain/config/types';
 import type { PlaybackSource } from '@/ports/EngineTypes';
-import { decodeAudiopath, parseServiceNativeAudiopath } from '@/domain/zones/audiopath';
+import { parseTrackAudiopath } from '@/domain/zones/audiopath';
+import { findBridgeForProviderKey } from '@/adapters/content/providers/bridgeLookup';
 import { slugFromBridgeId } from '@/domain/media/serviceIdentity';
 import { buildProxyUrl } from '@/shared/urlProxy';
 import {
@@ -159,30 +160,17 @@ export class YoutubeStreamService {
   }
 
   private parseTrackRequest(audiopath: string): YoutubeTrackRequest | null {
-    const raw = String(audiopath || '');
-    const native = parseServiceNativeAudiopath(raw);
-    let providerKey: string; let type: string; let rawId: string;
-    if (native) {
-      providerKey = native.slug ? `${native.service}:${native.slug}` : native.service;
-      type = native.isLibrary ? `library-${native.kind}` : native.kind;
-      rawId = native.id;
-    } else {
-      const parts = raw.split(':');
-      if (parts.length < 3) return null;
-      providerKey = parts[0] ?? '';
-      type = (parts[1] ?? '').toLowerCase();
-      rawId = parts.slice(2).join(':').trim();
-    }
-    const idValue = decodeAudiopath(rawId) || rawId;
-    if (!providerKey || !idValue || type !== 'track') return null;
-    const bridge =
-      this.bridgesByProvider.get(providerKey) ??
-      this.bridgesById.get(providerKey.split('@')[1] ?? '') ??
-      null;
+    const parsed = parseTrackAudiopath(audiopath);
+    if (!parsed || parsed.kind !== 'track') return null;
+    const bridge = findBridgeForProviderKey(
+      parsed.providerKey,
+      this.bridgesByProvider,
+      this.bridgesById,
+    );
     if (!bridge) return null;
-    const videoId = extractVideoId(idValue);
+    const videoId = extractVideoId(parsed.id);
     if (!videoId) return null;
-    return { providerId: providerKey, videoId, bridge };
+    return { providerId: parsed.providerKey, videoId, bridge };
   }
 
   private execOptions(): YtDlpExecOptions {

@@ -43,6 +43,7 @@ import './playbackRefactorSeams.test';
 import './playbackCoordinator.characterization.test';
 import './playRequestProviderTraits.test';
 import './alertClipDuration.test';
+import './parseTrackAudiopath.test';
 import './webdavPaths.test';
 import './beoremoteMenu.test';
 import './beoremoteApi.test';

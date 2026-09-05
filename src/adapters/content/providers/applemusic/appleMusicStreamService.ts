@@ -3,7 +3,8 @@ import { safeReadText } from '@/shared/bestEffort';
 import type { ConfigPort } from '@/ports/ConfigPort';
 import type { StreamingServiceConfig } from '@/domain/config/types';
 import type { PlaybackSource } from '@/ports/EngineTypes';
-import { decodeAudiopath, parseServiceNativeAudiopath } from '@/domain/zones/audiopath';
+import { parseTrackAudiopath } from '@/domain/zones/audiopath';
+import { findBridgeForProviderKey } from '@/adapters/content/providers/bridgeLookup';
 import { slugFromBridgeId } from '@/domain/media/serviceIdentity';
 import {
   asId,
@@ -311,41 +312,19 @@ export class AppleMusicStreamService {
   }
 
   private parseTrackRequest(audiopath: string): AppleMusicTrackRequest | null {
-    const raw = String(audiopath || '');
-    // Service-native form: `applemusic:track:X` or `applemusic:<slug>:track:X`
-    // (and library- aliases). The parser peels the optional slug so the kind is
-    // read correctly even in the multi-account form.
-    const native = parseServiceNativeAudiopath(raw);
-    let providerKey: string;
-    let type: string;
-    let rawId: string;
-    if (native) {
-      providerKey = native.slug ? `${native.service}:${native.slug}` : native.service;
-      type = native.isLibrary ? `library-${native.kind}` : native.kind;
-      rawId = native.id;
-    } else {
-      // Legacy Loxone form `spotify@<bridgeId>:<kind>:<id>`.
-      const parts = raw.split(':');
-      if (parts.length < 3) return null;
-      providerKey = parts[0] ?? '';
-      type = (parts[1] ?? '').toLowerCase();
-      rawId = parts.slice(2).join(':').trim();
-    }
-    const decodedId = decodeAudiopath(rawId.trim());
-    const trackId = decodedId || rawId.trim();
-    if (!providerKey || !trackId) return null;
-    // Apple library IDs are prefixed a./i./l./p. (artist/item/album/playlist).
-    const looksLikeLibraryId = /^[ailp]\./i.test(trackId);
-    const isLibrary = type.startsWith('library-') || looksLikeLibraryId;
-    const normalized = type.replace(/^library-/, '');
-    if (normalized !== 'track') return null;
+    const parsed = parseTrackAudiopath(audiopath);
+    if (!parsed || parsed.kind !== 'track') return null;
+    const trackId = parsed.id;
+    // Apple library IDs are prefixed a./i./l./p. (artist/item/album/playlist), so a
+    // path can be a library one without saying so in its kind. Only Apple has that.
+    const isLibrary = parsed.isLibrary || /^[ailp]\./i.test(trackId);
+    const providerKey = parsed.providerKey;
 
-    const bridge =
-      // Service-native prefix (`applemusic` / `applemusic:<slug>`, indexed in
-      // configureFromConfig) or the legacy `spotify@<bridgeId>` map key.
-      this.bridgesByProvider.get(providerKey) ??
-      this.bridgesById.get(providerKey.split('@')[1] ?? '') ??
-      null;
+    const bridge = findBridgeForProviderKey(
+      providerKey,
+      this.bridgesByProvider,
+      this.bridgesById,
+    );
     if (!bridge) return null;
 
     return { providerId: providerKey, trackId, isLibrary, bridge };

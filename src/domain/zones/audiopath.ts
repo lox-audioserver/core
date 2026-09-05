@@ -156,6 +156,64 @@ export function hasSlowStreamResolution(service: string | null | undefined): boo
 }
 
 /**
+ * What a stream request's audiopath names: whose it is, what kind of thing, and
+ * which one.
+ *
+ * Two forms reach here and both must work. Service-native
+ * (`deezer:track:X`, or `deezer:<slug>:track:X` once an account slug is in
+ * play) and the legacy Loxone-bridged `spotify@<bridgeId>:<kind>:<id>`. The
+ * slug is why a plain `:` split is not enough: it would read the slug as the
+ * kind and reject the path.
+ *
+ * `kind` comes back with any `library-` prefix stripped and reported through
+ * {@link ParsedTrackAudiopath.isLibrary} instead, so a caller tests one thing.
+ * Every stream service parsed this itself; four of the six then compared the
+ * unstripped kind to `'track'` and so rejected a library track outright.
+ */
+export type ParsedTrackAudiopath = {
+  /** `<service>`, `<service>:<slug>` or the legacy `spotify@<bridgeId>`. */
+  providerKey: string;
+  /** Base kind, `library-` stripped: 'track', 'album', 'artist', 'playlist', 'radio'. */
+  kind: string;
+  /** Decoded id, still whatever the service uses. */
+  id: string;
+  isLibrary: boolean;
+};
+
+export function parseTrackAudiopath(audiopath: string): ParsedTrackAudiopath | null {
+  const raw = String(audiopath || '');
+  const native = parseServiceNativeAudiopath(raw);
+  let providerKey: string;
+  let kindRaw: string;
+  let rawId: string;
+  if (native) {
+    providerKey = native.slug ? `${native.service}:${native.slug}` : native.service;
+    kindRaw = native.isLibrary ? `library-${native.kind}` : native.kind;
+    rawId = native.id;
+  } else {
+    const parts = raw.split(':');
+    if (parts.length < 3) {
+      return null;
+    }
+    providerKey = parts[0] ?? '';
+    kindRaw = (parts[1] ?? '').toLowerCase();
+    rawId = parts.slice(2).join(':');
+  }
+  const trimmedId = rawId.trim();
+  const id = decodeAudiopath(trimmedId) || trimmedId;
+  if (!providerKey || !id) {
+    return null;
+  }
+  const isLibrary = kindRaw.startsWith('library-');
+  return {
+    providerKey,
+    kind: isLibrary ? kindRaw.slice('library-'.length) : kindRaw,
+    id,
+    isLibrary,
+  };
+}
+
+/**
  * Lightweight provider detection for Loxone audiopaths.
  */
 export function detectServiceFromAudiopath(
