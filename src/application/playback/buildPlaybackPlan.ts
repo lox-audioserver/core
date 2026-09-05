@@ -1,7 +1,7 @@
 import type { PlaybackMetadata } from '@/ports/types/playback';
 import type { ZoneContext } from '@/application/zones/internal/zoneTypes';
 import type { PreferredPlaybackSettings } from '@/application/playback/policies/OutputFormatPolicy';
-import { detectServiceFromAudiopath } from '@/domain/zones/audiopath';
+import { detectServiceFromAudiopath, isBridgeQueueService } from '@/domain/zones/audiopath';
 import type { PlaybackPlan, ProviderKind } from '@/application/playback/types/PlaybackPlan';
 
 type PlaybackClassification = {
@@ -19,24 +19,13 @@ export type BuildPlaybackPlanArgs = {
   classification?: PlaybackClassification;
 };
 
-const mapProvider = (service: string): ProviderKind => {
-  if (service === 'applemusic') {
-    return 'applemusic';
-  }
-  if (service === 'deezer') {
-    return 'deezer';
-  }
-  if (service === 'tidal') {
-    return 'tidal';
-  }
-  if (service === 'ytmusic') {
-    return 'ytmusic';
-  }
-  if (service === 'soundcloud') {
-    return 'soundcloud';
-  }
-  return null;
-};
+/**
+ * A detected service becomes a provider when it is one we build a queue for.
+ * Everything else — spotify, musicassistant, library, radio, youtube — is
+ * handled elsewhere in this function and is not a provider here.
+ */
+const mapProvider = (service: string): ProviderKind =>
+  isBridgeQueueService(service) ? (service as ProviderKind) : null;
 
 export function buildPlaybackPlan(args: BuildPlaybackPlanArgs): PlaybackPlan {
   const detected = detectServiceFromAudiopath(args.audiopath);

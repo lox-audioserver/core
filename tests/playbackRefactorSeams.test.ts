@@ -236,3 +236,21 @@ test('buildPlaybackPlan classifies spotify/musicassistant/provider/playUri', () 
   assert.equal(local.kind, 'queue');
   assert.equal(local.provider, null);
 });
+
+test('every bridged service with queue handling becomes a provider, youtube does not', () => {
+  const ctx = { id: 1, name: 'Zone' } as ZoneContext;
+  const settings: PreferredPlaybackSettings = { outputOverride: null };
+  const metadata: PlaybackMetadata = { title: 't', artist: 'a', album: 'b' };
+  const plan = (audiopath: string) =>
+    buildPlaybackPlan({ ctx, audiopath, metadata, isRadio: false, preferredSettings: settings });
+
+  for (const service of ['applemusic', 'deezer', 'tidal', 'ytmusic', 'soundcloud']) {
+    const built = plan(`${service}:track:abc`);
+    assert.equal(built.provider, service, service);
+    assert.equal(built.kind, 'provider-stream', service);
+    assert.equal((built.metadata as any).audiotype, 5, service);
+  }
+
+  // Bridged, but with no queue handling of its own — so not a provider here.
+  assert.equal(plan('youtube:track:abc').provider, null);
+});

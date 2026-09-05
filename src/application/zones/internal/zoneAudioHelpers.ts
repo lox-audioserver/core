@@ -1,6 +1,6 @@
 import type { QueueItem, ZoneContext } from '@/application/zones/internal/zoneTypes';
 import { AudioEventType, AudioType, FileType } from '@/domain/zones/enums';
-import { decodeAudiopath, detectServiceFromAudiopath, encodeAudiopath } from '@/domain/zones/audiopath';
+import { decodeAudiopath, detectServiceFromAudiopath, encodeAudiopath, isBridgeQueueService } from '@/domain/zones/audiopath';
 import { RADIO_PARADISE_LABELS as RADIO_PARADISE_ID_LABELS, RADIO_PARADISE_PATH_LABELS } from '@/domain/radioparadise/stations';
 import { getMusicAssistantProviderId, getMusicAssistantUserId } from '@/application/zones/internal/musicAssistantProvider';
 import type { ContentPort } from '@/ports/ContentPort';
@@ -140,12 +140,7 @@ export function getInputAudioType(ctx: ZoneContext, audiopathOverride?: string):
   // AudioType.Spotify (5); resolveDisplayAudiotype then flips 5→Playlist(2) for
   // non-spotify queue authorities, keeping the emitted audiotype bit-identical.
   const detectedService = detectServiceFromAudiopath(audiopath);
-  const isBridgedStreamingService =
-    detectedService === 'applemusic' ||
-    detectedService === 'deezer' ||
-    detectedService === 'tidal' ||
-    detectedService === 'soundcloud' ||
-    detectedService === 'ytmusic';
+  const isBridgedStreamingService = isBridgeQueueService(detectedService);
   // Prefer the active input mode when available, otherwise fall back to URI heuristics.
   if (ctx.inputMode === 'airplay' || audiopath.startsWith('airplay://')) {
     return 4;
