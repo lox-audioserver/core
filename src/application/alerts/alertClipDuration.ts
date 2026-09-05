@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { stat } from 'node:fs/promises';
 import { createLogger } from '@/shared/logging/logger';
 import { ffmpegBinary } from '@/engine/ffmpegProcess';
 
@@ -6,8 +7,43 @@ const DURATION_PROBE_TIMEOUT_MS = 30000;
 
 const log = createLogger('Alerts', 'Duration');
 
-/** Memoized per absolute path; alert clips are written once and then only read. */
+/**
+ * Memoized per clip, keyed by what the file *is* rather than only where it sits.
+ *
+ * An alert clip is not written once and then only read, which is what an earlier
+ * version of this cache assumed: the admin UI replaces a bundled sound in place
+ * and can revert it, both to the same path. Keyed on the path alone, a 3 s bell
+ * replaced by a 30 s clip kept reporting 3 s until a restart — and the stop timer
+ * is fed from here, so the new clip was cut off mid-way. Size and mtime change
+ * whenever the bytes do, so a replaced file simply misses the cache.
+ */
 const durationCache = new Map<string, number>();
+
+/** Bounded so replacing a clip repeatedly cannot grow the map without end. */
+const CACHE_LIMIT = 200;
+
+/**
+ * Identity of the file's current contents, or null when it cannot be stat'd —
+ * in which case nothing is cached and the probe is left to fail on its own.
+ */
+async function cacheKey(absPath: string): Promise<string | null> {
+  try {
+    const info = await stat(absPath);
+    return `${absPath}:${info.size}:${info.mtimeMs}`;
+  } catch {
+    return null;
+  }
+}
+
+function remember(key: string, seconds: number): void {
+  if (durationCache.size >= CACHE_LIMIT) {
+    const oldest = durationCache.keys().next().value;
+    if (oldest !== undefined) {
+      durationCache.delete(oldest);
+    }
+  }
+  durationCache.set(key, seconds);
+}
 
 /**
  * Resolve the playable length of an alert clip in whole seconds, or `undefined`
@@ -18,18 +54,40 @@ const durationCache = new Map<string, number>();
  * measurement method regardless of where the audio came from.
  */
 export async function probeAlertDurationSeconds(absPath: string): Promise<number | undefined> {
-  const cached = durationCache.get(absPath);
-  if (cached !== undefined) {
-    return cached;
+  const key = await cacheKey(absPath);
+  if (key !== null) {
+    const cached = durationCache.get(key);
+    if (cached !== undefined) {
+      return cached;
+    }
   }
-  const seconds = await decodeDurationSeconds(absPath);
+  const seconds = await decode(absPath);
   if (typeof seconds === 'number' && seconds > 0) {
     const rounded = Math.round(seconds);
-    durationCache.set(absPath, rounded);
+    if (key !== null) {
+      remember(key, rounded);
+    }
     log.debug('alert duration probed', { path: absPath, durationSec: rounded });
     return rounded;
   }
   return undefined;
+}
+
+type DurationDecoder = (absPath: string) => Promise<number | undefined>;
+
+let decode: DurationDecoder = (absPath) => decodeDurationSeconds(absPath);
+
+/**
+ * Test seam: swap the ffmpeg probe out, and restore it with the returned
+ * function. The suite mocks every ffmpeg spawn globally, so a test cannot reach
+ * the real decoder — and what is worth testing here is the caching, not ffmpeg.
+ */
+export function setDurationDecoderForTests(fn: DurationDecoder): () => void {
+  const previous = decode;
+  decode = fn;
+  return () => {
+    decode = previous;
+  };
 }
 
 /**
