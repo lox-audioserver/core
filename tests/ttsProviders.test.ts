@@ -3,7 +3,9 @@ import { test } from './testHarness';
 import {
   buildSpeechRequest,
   clampSpeechInput,
+  modelHonoursInstructions,
   resolveSpeechEndpoint,
+  speechCacheKey,
   OpenAiTtsProvider,
 } from '../src/application/alerts/openAiTtsProvider';
 import { LoxBerryTtsProvider } from '../src/application/alerts/loxberryTtsProvider';
@@ -87,6 +89,39 @@ test('speech request: text within the ceiling is passed through untouched', () =
   const text = 'Het eten staat klaar';
   assert.equal(clampSpeechInput(text), text);
   assert.equal(clampSpeechInput('x'.repeat(4096)).length, 4096, 'exactly at the limit is not cut');
+});
+
+test('speaking style: only OpenAI\'s tts-1 family is known to drop instructions', () => {
+  assert.equal(modelHonoursInstructions('tts-1'), false, 'the default model ignores a style');
+  assert.equal(modelHonoursInstructions('tts-1-hd'), false);
+  assert.equal(modelHonoursInstructions('TTS-1'), false, 'the name is not case-sensitive');
+  assert.equal(modelHonoursInstructions('gpt-4o-mini-tts'), true);
+  assert.equal(modelHonoursInstructions(' kokoro '), true, 'a local engine is taken at its word');
+  assert.equal(modelHonoursInstructions('tts-1-clone-xl'), false, 'a tts-1 variant still counts');
+});
+
+test('speaking style: a configured style reaches the backend verbatim', () => {
+  const style = 'Speak natural Austrian German. Use a calm, clear and friendly voice.';
+  const request = buildSpeechRequest(
+    openAiConfig({ model: 'gpt-4o-mini-tts', instructions: `  ${style}  ` }),
+    'Das Essen ist fertig',
+  );
+
+  assert.equal(request.body.instructions, style, 'trimmed, otherwise untouched');
+  assert.equal(request.body.model, 'gpt-4o-mini-tts');
+});
+
+test('clip cache: the same text in a changed style is rendered again, not replayed', () => {
+  const base = openAiConfig({ model: 'gpt-4o-mini-tts' });
+  const clipFor = (instructions: string): string =>
+    ttsClipFilename(
+      'tts-openai',
+      'mp3',
+      speechCacheKey(buildSpeechRequest({ ...base, instructions }, 'Hallo'), 'de'),
+    );
+
+  assert.notEqual(clipFor('Speak calmly'), clipFor('Speak urgently'), 'the style is part of the key');
+  assert.equal(clipFor('Speak calmly'), clipFor('Speak calmly'), 'an unchanged style reuses the clip');
 });
 
 test('clip cache: a changed voice yields a different file, identical settings do not', () => {

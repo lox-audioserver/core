@@ -20,6 +20,7 @@ const MAX_INPUT_CHARS = 4096;
  */
 export class OpenAiTtsProvider implements TtsProvider {
   private readonly log = createLogger('Alerts', 'OpenAiTts');
+  private warnedAboutIgnoredInstructions = false;
 
   constructor(private readonly config: OpenAiTtsProviderConfig) {}
 
@@ -33,6 +34,8 @@ export class OpenAiTtsProvider implements TtsProvider {
       this.log.warn('OpenAI TTS provider is disabled');
       return undefined;
     }
+
+    this.warnIfInstructionsAreIgnored();
 
     const spoken = clampSpeechInput(normalizedText);
     if (spoken.length !== normalizedText.length) {
@@ -70,6 +73,26 @@ export class OpenAiTtsProvider implements TtsProvider {
       });
       return undefined;
     }
+  }
+
+  /**
+   * A style the model drops is the quietest kind of failure: the request
+   * succeeds, the announcement plays, and only the tone is missing. Said once
+   * per provider so it names the cause without following every announcement.
+   */
+  private warnIfInstructionsAreIgnored(): void {
+    if (this.warnedAboutIgnoredInstructions || !this.config.instructions?.trim()) {
+      return;
+    }
+    const model = this.config.model?.trim() || DEFAULT_MODEL;
+    if (modelHonoursInstructions(model)) {
+      return;
+    }
+    this.warnedAboutIgnoredInstructions = true;
+    this.log.warn('speaking style is configured but this model ignores it', {
+      model,
+      supportedBy: 'gpt-4o-mini-tts',
+    });
   }
 
   private async fetchSpeech(request: SpeechRequest): Promise<Buffer> {
@@ -143,6 +166,15 @@ export function buildSpeechRequest(
 }
 
 /**
+ * OpenAI's own `tts-1` and `tts-1-hd` drop `instructions` silently — and
+ * `tts-1` is what an empty model field falls back to. Every other name,
+ * including whatever a local engine calls its models, is taken at its word.
+ */
+export function modelHonoursInstructions(model: string): boolean {
+  return !/^tts-1(-|$)/i.test(model.trim());
+}
+
+/**
  * Keep `input` inside the documented 4096-character ceiling, cutting at a word
  * boundary so the announcement ends on a whole word rather than mid-syllable.
  *
@@ -204,7 +236,7 @@ function resolveVoice(config: OpenAiTtsProviderConfig, language?: string): strin
  * what the caller asked for, and a later voice mapping must not replay clips
  * rendered before it existed.
  */
-function speechCacheKey(request: SpeechRequest, language?: string): string[] {
+export function speechCacheKey(request: SpeechRequest, language?: string): string[] {
   return [
     request.url,
     request.body.model,
