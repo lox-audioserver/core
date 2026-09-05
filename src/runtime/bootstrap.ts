@@ -8,7 +8,6 @@ import { toLoxoneAudiopath } from '@/domain/zones/bridgeIdentity';
 import { ServerLifecycle } from '@/domain/server/lifecycle';
 import { MqttPublisher } from '@/adapters/mqtt/mqttPublisher';
 import { toApiZoneState } from '@/adapters/http/api/zoneProjection';
-import { toApiAudioFormat } from '@/adapters/http/api/streamFormat';
 import { MediaServer } from '@/adapters/mediaserver/mediaServer';
 import { SubsonicApi } from '@/adapters/subsonic/subsonicApi';
 import { WebdavServer } from '@/adapters/webdav/webdavServer';
@@ -17,19 +16,8 @@ import { DlnaInputService } from '@/adapters/inputs/dlna/dlnaInputService';
 import { BluetoothInputService } from '@/adapters/inputs/bluetooth/bluetoothInputService';
 import { CustomRadioStore } from '@/adapters/content/providers/customRadioStore';
 import { SpotifyServiceManagerProvider } from '@/adapters/content/providers/spotifyServiceManager';
-import { AppleMusicStreamService } from '@/adapters/content/providers/applemusic/appleMusicStreamService';
-import { setAppleMusicDeveloperTokenSource } from '@/adapters/content/providers/applemusic/appleMusicAuth';
-import { AppleMusicStreamResolver } from '@/adapters/content/providers/applemusic/appleMusicStreamResolver';
-import { DeezerStreamService } from '@/adapters/content/providers/deezer/deezerStreamService';
-import { DeezerStreamResolver } from '@/adapters/content/providers/deezer/deezerStreamResolver';
-import { TidalStreamService } from '@/adapters/content/providers/tidal/tidalStreamService';
-import { TidalStreamResolver } from '@/adapters/content/providers/tidal/tidalStreamResolver';
-import { YtMusicStreamService } from '@/adapters/content/providers/ytmusic/ytmusicStreamService';
-import { YtMusicStreamResolver } from '@/adapters/content/providers/ytmusic/ytmusicStreamResolver';
-import { YoutubeStreamService } from '@/adapters/content/providers/youtube/youtubeStreamService';
-import { YoutubeStreamResolver } from '@/adapters/content/providers/youtube/youtubeStreamResolver';
-import { SoundCloudStreamService } from '@/adapters/content/providers/soundcloud/soundcloudStreamService';
-import { SoundCloudStreamResolver } from '@/adapters/content/providers/soundcloud/soundcloudStreamResolver';
+import { createStreamProviders } from '@/runtime/streamProviders';
+import { createApiZoneResolvers } from '@/runtime/apiZoneResolvers';
 import { HttpService } from '@/adapters/http';
 import { LoxoneHttpService } from '@/adapters/loxone/http';
 import { LoxoneCommandProcessor } from '@/adapters/loxone/http/commandProcessor';
@@ -104,10 +92,6 @@ import { ApiEventHub } from '@/adapters/http/api/apiEventHub';
 import { withApiEvents } from '@/adapters/http/api/apiNotifierTap';
 import { withDlnaReflection } from '@/adapters/inputs/dlna/dlnaNotifierTap';
 import { readBuildVersion } from '@/shared/serverVersion';
-import { parseServiceNativeAudiopath } from '@/domain/zones/audiopath';
-import { serviceLabelForAudiopath } from '@/domain/media/serviceIdentity';
-import { buildSqueezeliteAdminPlayerSnapshot } from '@/adapters/http/adminApi/adminApiHandler';
-import { getZoneOutputConfig } from '@/adapters/http/adminApi/config/configHandlers';
 import { ConnectionRegistry } from '@/adapters/loxone/ws/connectionRegistry';
 import { LoxoneWsNotifier } from '@/adapters/loxone/ws/notifier';
 import { ServerHeartbeat } from '@/adapters/loxone/ws/serverHeartbeat';
@@ -156,68 +140,22 @@ export function createRuntime(): Runtime {
   const loxoneNotifier = new LoxoneWsNotifier(connectionRegistry, groupTracker);
   // The public /api surface listens on the same zone-change signal the Loxone
   // notifier does, so both always describe the same state (see withApiEvents).
-  // Which device a zone's output plays to, for the public API's `output.device`.
-  // Reuses the squeezelite identity resolver the admin API already had, so the MAC
-  // reported here is the same one that endpoint reports (sonn-audio/core#247). Shared
-  // by the request path and the event stream, so both describe a zone identically.
-  // Only squeezelite identifies a device today; other protocols report none.
-  const resolveOutputDevice = (zoneId: number) => {
-    const zone = configPort.getConfig().zones?.find((z) => z.id === zoneId);
-    if (!zone) {
-      return undefined;
-    }
-    const snapshot = buildSqueezeliteAdminPlayerSnapshot(
-      getZoneOutputConfig(zone),
-      squeezeliteCore.players,
-    );
-    return snapshot
-      ? { id: snapshot.mac ?? null, name: snapshot.name ?? null, connected: snapshot.connected }
-      : undefined;
-  };
-
-  // What a zone's volume will accept, for the public API's `volumeLimits`. Shared by
-  // the request path and the event stream so both report the same ceiling.
-  const resolveVolumeLimits = (zoneId: number) => {
-    const v = configPort.getConfig().zones?.find((z) => z.id === zoneId)?.volumes;
-    if (!v) {
-      return undefined;
-    }
-    return { max: v.maxVolume, default: v.default, step: v.volstep };
-  };
-
-  // Which protocol a zone plays over. The Loxone notifier resolves this the same way at
-  // emit time; the public API needs it too, since ZoneState never stores it.
-  const resolveOutputProtocol = (zoneId: number) =>
-    resolveZoneOutputProtocol(zoneManager.getTechnicalSnapshot(zoneId));
-
-  // The configured name of the service an audiopath belongs to. `state.sourceName` holds
-  // the Loxone-facing name instead, which for a bridged service is the Spotify disguise.
-  const resolveServiceLabel = (audiopath: string): string | null =>
-    serviceLabelForAudiopath(
-      audiopath,
-      configPort.getConfig().content?.streamingServices,
-      parseServiceNativeAudiopath,
-    );
-
-  /**
-   * The configured name of a line-in. `state.sourceName` holds the server's MAC for these,
-   * which is what the Loxone clients expect and useless to anyone else.
-   */
-  const resolveInputLabel = (inputId: string): string | null => {
-    const inputs = configPort.getConfig()?.inputs?.lineIn?.inputs ?? [];
-    const match = inputs.find(
-      (entry) => typeof entry?.id === 'string' && entry.id.trim() === inputId,
-    );
-    const name = typeof match?.name === 'string' ? match.name.trim() : '';
-    return name || null;
-  };
-
-  /**
-   * What a zone is streaming, for the public `format` field. Read from the engine's session
-   * stats, which is the same source the admin UI's `tech.streamStats` uses.
-   */
-  const resolveStreamFormat = (zoneId: number) => toApiAudioFormat(audioManager.getStreamStats(zoneId));
-  const resolvePowerState = (zoneId: number) => zoneManager.getPowerState(zoneId);
+  // These answer the parts of a zone that ZoneState does not hold; the getters are
+  // there because the collaborators are built further down this same function.
+  const {
+    resolveOutputDevice,
+    resolveVolumeLimits,
+    resolveOutputProtocol,
+    resolveServiceLabel,
+    resolveInputLabel,
+    resolveStreamFormat,
+    resolvePowerState,
+  } = createApiZoneResolvers({
+    configPort: () => configPort,
+    zoneManager: () => zoneManager,
+    audioManager: () => audioManager,
+    squeezeliteCore: () => squeezeliteCore,
+  });
 
   const apiEventHub = new ApiEventHub();
   const ports = createRuntimePorts({
@@ -313,20 +251,7 @@ export function createRuntime(): Runtime {
     notifySourceDuration: (zoneId: number, durationSec: number) =>
       requireZoneManager().applySourceDuration(zoneId, durationSec),
   };
-  // Source the Apple Music developer token live from config for the auth flow and API bearer.
-  setAppleMusicDeveloperTokenSource(() => configPort.getConfig().content?.appleMusic?.developerToken);
-  const appleMusicStreamService = new AppleMusicStreamService(outputHandlersProxy.onOutputError, configPort);
-  const deezerStreamService = new DeezerStreamService(outputHandlersProxy.onOutputError, configPort);
-  const tidalStreamService = new TidalStreamService(outputHandlersProxy.onOutputError, configPort);
-  const ytmusicStreamService = new YtMusicStreamService(outputHandlersProxy.onOutputError, configPort);
-  const youtubeStreamService = new YoutubeStreamService(outputHandlersProxy.onOutputError, configPort);
-  const soundcloudStreamService = new SoundCloudStreamService(outputHandlersProxy.onOutputError, configPort);
-  const appleMusicStreamResolver = new AppleMusicStreamResolver(appleMusicStreamService);
-  const deezerStreamResolver = new DeezerStreamResolver(deezerStreamService);
-  const tidalStreamResolver = new TidalStreamResolver(tidalStreamService);
-  const ytmusicStreamResolver = new YtMusicStreamResolver(ytmusicStreamService);
-  const youtubeStreamResolver = new YoutubeStreamResolver(youtubeStreamService);
-  const soundcloudStreamResolver = new SoundCloudStreamResolver(soundcloudStreamService);
+  const streamProviders = createStreamProviders(configPort, outputHandlersProxy.onOutputError);
   const engine = new EngineAdapter(audioStreamEngine);
   const lineInRegistry = new LineInIngestRegistry();
   const mdnsService = new MdnsService();
@@ -427,15 +352,7 @@ export function createRuntime(): Runtime {
     };
   });
 
-  // Order decides which service claims an ambiguous audiopath first.
-  const contentAdapter = createContentAdapter(contentManager, [
-    appleMusicStreamResolver,
-    deezerStreamResolver,
-    tidalStreamResolver,
-    ytmusicStreamResolver,
-    youtubeStreamResolver,
-    soundcloudStreamResolver,
-  ]);
+  const contentAdapter = createContentAdapter(contentManager, streamProviders.resolvers);
   const groupManager = createGroupManager({ notifier: ports.notifier, airplayGroup: airplayGroupController, configPort });
   const mixedGroupController = createMixedGroupController(configPort, audioManager);
   const favoritesManager = createFavoritesManager({ notifier: ports.notifier, contentPort: contentAdapter });
@@ -832,11 +749,7 @@ export function createRuntime(): Runtime {
       serverVersion: readBuildVersion(),
       lifecycle,
       browserZoneRegistry,
-      streamProxyRoutes: [
-        tidalStreamService.getProxyRoute(),
-        deezerStreamService.getProxyRoute(),
-        appleMusicStreamService.getProxyRoute(),
-      ],
+      streamProxyRoutes: streamProviders.proxyRoutes,
       mediaServer,
       mqttPublisher,
       alerts: alertsPort,
