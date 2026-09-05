@@ -135,3 +135,73 @@ test('a real Spotify track still gets its account', async () => {
     assert.equal(stored.items[0]?.audiopath, 'spotify@md123121:track:2bJtJv5NGkYUFP6prU3WSg');
   });
 });
+
+// ── The Loxone item type per bridged service ─────────────────────────────────
+// Four services had a branch each in `resolveService`, three of them identical.
+// What actually differs is which word in the path means "container": an album
+// for most, a playlist or artist for SoundCloud, which has no albums.
+
+function makeRecentsManager() {
+  return createRecentsManager({
+    notifier: { notifyRecentlyPlayedChanged: () => {} } as any,
+    contentPort: {
+      getDefaultSpotifyAccountId: () => null,
+      resolveMetadata: async () => null,
+      getBridgeRegistry: () => EMPTY_REGISTRY,
+    } as any,
+  });
+}
+
+test('a bridged album is typed as a container, a track is not', () => {
+  const recentsManager = makeRecentsManager();
+
+  for (const service of ['applemusic', 'deezer', 'tidal']) {
+    assert.equal(
+      recentsManager.resolveService(`${service}:album:a1`).type,
+      7,
+      `${service} album`,
+    );
+    assert.equal(
+      recentsManager.resolveService(`${service}:track:t1`).type,
+      2,
+      `${service} track`,
+    );
+  }
+});
+
+test('soundcloud reads playlists and artists as containers, having no albums', () => {
+  const recentsManager = makeRecentsManager();
+
+  assert.equal(recentsManager.resolveService('soundcloud:playlist:p1').type, 7);
+  assert.equal(recentsManager.resolveService('soundcloud:artist:a1').type, 7);
+  assert.equal(recentsManager.resolveService('soundcloud:track:t1').type, 2);
+  // An album means nothing here, so it is not a container.
+  assert.equal(recentsManager.resolveService('soundcloud:album:x1').type, 2);
+});
+
+test('every bridged service is reported to Loxone as spotify', () => {
+  const recentsManager = makeRecentsManager();
+
+  for (const service of ['applemusic', 'deezer', 'tidal', 'soundcloud']) {
+    const resolved = recentsManager.resolveService(`${service}:track:t1`);
+    assert.equal(resolved.service, 'spotify', service);
+    assert.equal(resolved.serviceType, 3, service);
+  }
+});
+
+test('a service with no recents handling of its own falls through to custom', () => {
+  const recentsManager = makeRecentsManager();
+
+  // ytmusic was never in that chain and is not in the table either.
+  assert.equal(recentsManager.resolveService('ytmusic:track:t1').service, 'custom');
+});
+
+test('a youtube path is filed as local library, because nothing recognises it', () => {
+  const recentsManager = makeRecentsManager();
+
+  // Pre-dates this table and is not caused by it: detectServiceFromAudiopath has
+  // no `youtube` case at all — the name is missing from both its checks and its
+  // return type — so a youtube path takes the library default and its recents are
+  // stored as a local file. Pinned as it stands rather than changed here.
+  assert.equal(recentsManager.resolveService('youtube:track:t1').service, 'library');
+});

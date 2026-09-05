@@ -44,6 +44,28 @@ function recentsEqual(next: RecentItem[], previous: RecentItem[]): boolean {
   });
 }
 
+/** What the Loxone client calls a container, and what it calls a single item. */
+const RECENT_TYPE_CONTAINER = 7;
+const RECENT_TYPE_ITEM = 2;
+
+/**
+ * How to read a bridged service's audiopath for the Loxone item type.
+ *
+ * All of them are reported to the client as `spotify` — that is the disguise
+ * the Loxone app understands — so the only thing that differs per service is
+ * which word in the path means "this is a container". Three look for an album;
+ * SoundCloud has no albums and uses playlists and artists instead.
+ *
+ * `ytmusic` and `youtube` are absent, as they were before this became a table:
+ * their recents fall through to `custom`.
+ */
+const BRIDGE_RECENT_TYPES: ReadonlyArray<{ service: string; container: RegExp }> = [
+  { service: 'applemusic', container: /album/ },
+  { service: 'deezer', container: /album/ },
+  { service: 'tidal', container: /album/ },
+  { service: 'soundcloud', container: /playlist|artist/ },
+];
+
 export class RecentsManager {
   private notifier: NotifierPort;
   private readonly recordLocks = new Map<number, Promise<void>>();
@@ -304,21 +326,13 @@ export class RecentsManager {
       const type = lower.includes(':album:') ? 7 : 2;
       return { service: 'spotify', serviceType: 3, type };
     }
-    if (detectedService === 'applemusic') {
-      const type = lower.includes('album') ? 7 : 2;
-      return { service: 'spotify', serviceType: 3, type };
-    }
-    if (detectedService === 'deezer') {
-      const type = lower.includes('album') ? 7 : 2;
-      return { service: 'spotify', serviceType: 3, type };
-    }
-    if (detectedService === 'tidal') {
-      const type = lower.includes('album') ? 7 : 2;
-      return { service: 'spotify', serviceType: 3, type };
-    }
-    if (detectedService === 'soundcloud') {
-      const type = lower.includes('playlist') || lower.includes('artist') ? 7 : 2;
-      return { service: 'spotify', serviceType: 3, type };
+    const bridged = BRIDGE_RECENT_TYPES.find((entry) => entry.service === detectedService);
+    if (bridged) {
+      return {
+        service: 'spotify',
+        serviceType: 3,
+        type: bridged.container.test(lower) ? RECENT_TYPE_CONTAINER : RECENT_TYPE_ITEM,
+      };
     }
     return { service: 'custom', serviceType: 3, type: 3 };
   }
