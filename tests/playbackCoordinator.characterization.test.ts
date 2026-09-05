@@ -1682,3 +1682,87 @@ test('a dlna cast can be seeked and its volume set, without losing the same-trac
   assert.equal(played.length, 2);
   assert.equal((played[1]?.source as { startAtSec?: number }).startAtSec, 61);
 });
+
+// ── Reporting a stream that never arrived ─────────────────────────────────────
+// Six services used to have a branch each here, differing only in the name in
+// the message — except Apple and SoundCloud, which stay quiet when their stream
+// service has already recorded a more specific reason for the same attempt. That
+// suppression is the part worth pinning: it is what keeps one failed track from
+// producing two playback errors.
+
+function providerContentPort(provider: string): ContentPort {
+  return { ...noopContentPort, providerForAudiopath: () => provider };
+}
+
+test('a bridged service that yields no stream is reported by name', async () => {
+  const { coordinator, ctx } = createHarness({ contentPort: providerContentPort('deezer') });
+
+  await coordinator.startQueuePlayback(ctx, 'deezer:track:t1', {
+    title: 'Track',
+    artist: 'Artist',
+    album: 'Album',
+    audiopath: 'deezer:track:t1',
+  });
+
+  assert.equal(ctx.lastPlaybackErrorReason, 'deezer stream unavailable');
+});
+
+test('apple music stays quiet when widevine already explained the failure', async () => {
+  const { coordinator, ctx } = createHarness({ contentPort: providerContentPort('applemusic') });
+  ctx.lastPlaybackErrorAt = Date.now();
+  ctx.lastPlaybackErrorReason = 'widevine missing';
+
+  await coordinator.startQueuePlayback(ctx, 'applemusic:track:t1', {
+    title: 'Track',
+    artist: 'Artist',
+    album: 'Album',
+    audiopath: 'applemusic:track:t1',
+  });
+
+  // The specific reason survives; no generic one is written over it.
+  assert.equal(ctx.lastPlaybackErrorReason, 'widevine missing');
+});
+
+test('soundcloud stays quiet when its stream service already said why', async () => {
+  const { coordinator, ctx } = createHarness({ contentPort: providerContentPort('soundcloud') });
+  ctx.lastPlaybackErrorAt = Date.now();
+  ctx.lastPlaybackErrorReason = 'soundcloud track is DRM protected';
+
+  await coordinator.startQueuePlayback(ctx, 'soundcloud:track:t1', {
+    title: 'Track',
+    artist: 'Artist',
+    album: 'Album',
+    audiopath: 'soundcloud:track:t1',
+  });
+
+  assert.equal(ctx.lastPlaybackErrorReason, 'soundcloud track is DRM protected');
+});
+
+test('a stale specific reason does not silence the next failure', async () => {
+  const { coordinator, ctx } = createHarness({ contentPort: providerContentPort('applemusic') });
+  // Older than the 2 s window hasRecentPlaybackError allows.
+  ctx.lastPlaybackErrorAt = Date.now() - 10_000;
+  ctx.lastPlaybackErrorReason = 'widevine missing';
+
+  await coordinator.startQueuePlayback(ctx, 'applemusic:track:t1', {
+    title: 'Track',
+    artist: 'Artist',
+    album: 'Album',
+    audiopath: 'applemusic:track:t1',
+  });
+
+  assert.equal(ctx.lastPlaybackErrorReason, 'apple music stream unavailable');
+});
+
+test('a service with no reported failure of its own is left alone', async () => {
+  const { coordinator, ctx } = createHarness({ contentPort: providerContentPort('spotify') });
+
+  await coordinator.startQueuePlayback(ctx, 'spotify:track:t1', {
+    title: 'Track',
+    artist: 'Artist',
+    album: 'Album',
+    audiopath: 'spotify:track:t1',
+  });
+
+  assert.notEqual(ctx.lastPlaybackErrorReason, 'spotify stream unavailable');
+});

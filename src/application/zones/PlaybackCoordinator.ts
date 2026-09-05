@@ -76,6 +76,57 @@ const UNKNOWN_OUTPUT_LAG_MS = 1000;
 /** How long a measured playout lag stays worth using. */
 const PLAYOUT_LAG_MAX_AGE_MS = 30_000;
 
+/**
+ * Providers whose stream URL is resolved by yt-dlp, which takes 5-7 s. Long
+ * enough that the app must be shown something in the meantime, so playback
+ * broadcasts a Loading… frame before it starts resolving.
+ *
+ * Membership is about how slow the resolve is, not about which service it is —
+ * a provider that stops needing yt-dlp leaves this set and nothing else moves.
+ */
+const SLOW_STREAM_RESOLUTION_PROVIDERS: ReadonlySet<ProviderKind> = new Set<ProviderKind>([
+  'ytmusic',
+  'youtube',
+]);
+
+/**
+ * What a listener is told when a bridged service's stream never arrives.
+ *
+ * Only the name differs for most of them. The exception is a service whose
+ * stream service has already recorded a specific reason for this same attempt —
+ * Apple's missing Widevine, SoundCloud's DRM note — where the generic error is
+ * suppressed so one track produces one playback error instead of two.
+ */
+type StreamFailureReport = {
+  provider: ProviderKind;
+  label: string;
+  /** True when a more specific reason for this attempt was already recorded. */
+  reasonAlreadyRecorded?: (lastError: string | undefined) => boolean;
+};
+
+const STREAM_FAILURE_REPORTS: ReadonlyArray<StreamFailureReport> = [
+  {
+    provider: 'applemusic',
+    label: 'apple music',
+    reasonAlreadyRecorded: (lastError) => lastError === 'widevine missing',
+  },
+  { provider: 'deezer', label: 'deezer' },
+  { provider: 'tidal', label: 'tidal' },
+  { provider: 'ytmusic', label: 'ytmusic' },
+  { provider: 'youtube', label: 'youtube' },
+  {
+    provider: 'soundcloud',
+    label: 'soundcloud',
+    reasonAlreadyRecorded: (lastError) => lastError?.startsWith('soundcloud') === true,
+  },
+];
+
+/** Music Assistant is selected by its external label, not by a provider kind. */
+const MUSIC_ASSISTANT_FAILURE_REPORT: StreamFailureReport = {
+  provider: null,
+  label: 'music assistant',
+};
+
 export class PlaybackCoordinator {
   private readonly zoneRepo: ZoneRepository;
   private readonly queueController: ZoneQueueController;
@@ -461,9 +512,9 @@ export class PlaybackCoordinator {
       ctx.metadata.radioControllable = false;
     }
     const classification = this.classifyAudiopath(audiopath);
-    // Broadcast Loading… immediately so the Loxone app shows feedback before
-    // yt-dlp resolves the stream URL (~5-7 s for YouTube/ytmusic).
-    if (classification.isYoutube || classification.isYtMusic) {
+    // Broadcast Loading… immediately so the app shows feedback while the stream
+    // URL is still being resolved.
+    if (SLOW_STREAM_RESOLUTION_PROVIDERS.has(classification.provider)) {
       this.notifier.notifyZoneStateChanged({
         ...ctx.state,
         mode: 'play',
@@ -530,41 +581,18 @@ export class PlaybackCoordinator {
     });
     if (!session) {
       this.audioManager.clearPlayRequest(ctx.id);
-      const lastError = ctx.lastPlaybackErrorReason?.trim().toLowerCase();
-      const hasRecentWidevineMissing =
-        this.hasRecentPlaybackError(ctx) && lastError === 'widevine missing';
-      if (plan.playExternalLabel === 'musicassistant') {
-        this.handlePlaybackError(ctx.id, 'music assistant stream unavailable', 'output');
-        this.log.warn('music assistant stream not ready; skipping playback', {
-          zoneId: ctx.id,
-        });
-      } else if (plan.provider === 'applemusic') {
-        if (!hasRecentWidevineMissing) {
-          this.handlePlaybackError(ctx.id, 'apple music stream unavailable', 'output');
+      const report =
+        plan.playExternalLabel === 'musicassistant'
+          ? MUSIC_ASSISTANT_FAILURE_REPORT
+          : STREAM_FAILURE_REPORTS.find((candidate) => candidate.provider === plan.provider);
+      if (report) {
+        const lastError = ctx.lastPlaybackErrorReason?.trim().toLowerCase();
+        const alreadyRecorded =
+          this.hasRecentPlaybackError(ctx) && report.reasonAlreadyRecorded?.(lastError) === true;
+        if (!alreadyRecorded) {
+          this.handlePlaybackError(ctx.id, `${report.label} stream unavailable`, 'output');
         }
-        this.log.warn('apple music stream not ready; skipping playback', { zoneId: ctx.id });
-      } else if (plan.provider === 'deezer') {
-        this.handlePlaybackError(ctx.id, 'deezer stream unavailable', 'output');
-        this.log.warn('deezer stream not ready; skipping playback', { zoneId: ctx.id });
-      } else if (plan.provider === 'tidal') {
-        this.handlePlaybackError(ctx.id, 'tidal stream unavailable', 'output');
-        this.log.warn('tidal stream not ready; skipping playback', { zoneId: ctx.id });
-      } else if (plan.provider === 'ytmusic') {
-        this.handlePlaybackError(ctx.id, 'ytmusic stream unavailable', 'output');
-        this.log.warn('ytmusic stream not ready; skipping playback', { zoneId: ctx.id });
-      } else if (plan.provider === 'youtube') {
-        this.handlePlaybackError(ctx.id, 'youtube stream unavailable', 'output');
-        this.log.warn('youtube stream not ready; skipping playback', { zoneId: ctx.id });
-      } else if (plan.provider === 'soundcloud') {
-        // The stream service already reports a specific reason (e.g. "soundcloud
-        // track is DRM protected"); only emit the generic error when it didn't,
-        // so a single track produces one playback error, not two.
-        const soundcloudReasonRecorded =
-          this.hasRecentPlaybackError(ctx) && lastError?.startsWith('soundcloud');
-        if (!soundcloudReasonRecorded) {
-          this.handlePlaybackError(ctx.id, 'soundcloud stream unavailable', 'output');
-        }
-        this.log.warn('soundcloud stream not ready; skipping playback', { zoneId: ctx.id });
+        this.log.warn(`${report.label} stream not ready; skipping playback`, { zoneId: ctx.id });
       }
       return null;
     }
@@ -635,48 +663,29 @@ export class PlaybackCoordinator {
     ctx.player.setEndGuardMs(this.computeOutputLatencyMs(outputs));
   }
 
+  /**
+   * Who owns this audiopath, and what that means for the zone's input mode.
+   *
+   * Spotify and Music Assistant are named because they *are* input modes; every
+   * other service is answered as a `provider` and asked about by property (see
+   * SLOW_STREAM_RESOLUTION_PROVIDERS) rather than by name.
+   */
   private classifyAudiopath(audiopath: string): {
     isSpotify: boolean;
     isMusicAssistant: boolean;
-    isAppleMusic: boolean;
-    isDeezer: boolean;
-    isTidal: boolean;
-    isYtMusic: boolean;
-    isYoutube: boolean;
-    isSoundcloud: boolean;
     provider: ProviderKind;
     nextInput: ZoneContext['inputMode'];
   } {
     const isSpotify = this.audioHelpers.isSpotifyAudiopath(audiopath);
     const isMusicAssistant = this.audioHelpers.isMusicAssistantAudiopath(audiopath);
-    // One lookup answers which service owns the path; the flags below are that answer
-    // spelled out for the callers that still ask per service.
-    const owner = this.audioHelpers.providerForAudiopath(audiopath);
-    const isAppleMusic = owner === 'applemusic';
-    const isDeezer = owner === 'deezer';
-    const isTidal = owner === 'tidal';
-    const isYtMusic = owner === 'ytmusic';
-    const isYoutube = owner === 'youtube';
-    const isSoundcloud = owner === 'soundcloud';
+    const provider = this.audioHelpers.providerForAudiopath(audiopath) as ProviderKind;
     const nextInput: ZoneContext['inputMode'] =
       isSpotify
         ? 'spotify'
         : isMusicAssistant
           ? 'musicassistant'
           : 'queue';
-    const provider = owner as ProviderKind;
-    return {
-      isSpotify,
-      isMusicAssistant,
-      isAppleMusic,
-      isDeezer,
-      isTidal,
-      isYtMusic,
-      isYoutube,
-      isSoundcloud,
-      provider,
-      nextInput,
-    };
+    return { isSpotify, isMusicAssistant, provider, nextInput };
   }
 
   private applyPlaybackInputTransition(
