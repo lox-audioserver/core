@@ -105,3 +105,114 @@ test('apple music album favorite stays a direct track queue without an extra bro
   // Items are already tracks, so no container sub-browse happens.
   assert.deepEqual(calls, ['library-album:al.9']);
 });
+
+// ── The other bridged services ────────────────────────────────────────────────
+// Apple Music was the only one that flattened containers; Deezer, Tidal, YouTube
+// Music and SoundCloud were copies of its branch that never got the fix, so
+// playing one of their artists queued albums the stream services reject
+// outright. They share one implementation now, and this pins that they do.
+
+function nativeAlbum(service: string, id: string): ContentFolderItem {
+  return {
+    id: `${service}:album:${id}`,
+    name: `Album ${id}`,
+    type: 2,
+    audiopath: `${service}:album:${id}`,
+    artist: 'Adele',
+    album: `Album ${id}`,
+  };
+}
+
+function nativeTrack(service: string, id: string, album: string): ContentFolderItem {
+  return {
+    id: `${service}:track:${id}`,
+    name: `Track ${id}`,
+    type: 2,
+    audiopath: `${service}:track:${id}`,
+    artist: 'Adele',
+    album,
+    duration: 200,
+  };
+}
+
+function makeNativeQueueController(
+  service: string,
+  resolve: (folderId: string) => ContentFolder | null,
+) {
+  const calls: string[] = [];
+  const contentPort = {
+    getDefaultSpotifyAccountId: () => null,
+    listBrowsableServices: () => [],
+    getServiceTrack: async () => null,
+    getMediaFolder: async () => null,
+    resolveMetadata: async () => null,
+    getServiceFolder: async (_service: string, _user: string, folderId: string) => {
+      calls.push(folderId);
+      return resolve(folderId);
+    },
+  };
+  const deps = {
+    log: { debug: () => {}, warn: () => {}, info: () => {}, spam: () => {} },
+    contentPort,
+    resolveBridgeProvider: () => service,
+    isMusicAssistantAudiopath: () => false,
+    getMusicAssistantUserId: () => 'ma',
+  };
+  return { qc: new QueueController({} as any, deps as any), calls };
+}
+
+for (const service of ['deezer', 'tidal', 'ytmusic', 'soundcloud']) {
+  test(`${service} artist favorite flattens albums into a playable track queue`, async () => {
+    const artistPath = `${service}:artist:123`;
+    const { qc, calls } = makeNativeQueueController(service, (folderId) => {
+      if (folderId === 'artist:123') {
+        return makeFolder([nativeAlbum(service, 'al.1'), nativeAlbum(service, 'al.2')]);
+      }
+      if (folderId === 'album:al.1') {
+        return makeFolder([
+          nativeTrack(service, 't.1', 'Album al.1'),
+          nativeTrack(service, 't.2', 'Album al.1'),
+        ]);
+      }
+      if (folderId === 'album:al.2') {
+        return makeFolder([nativeTrack(service, 't.3', 'Album al.2')]);
+      }
+      return null;
+    });
+
+    const queue = await qc.buildQueueForUri(artistPath, 'Zone', undefined, artistPath);
+
+    assert.equal(queue.length, 3);
+    for (const item of queue) {
+      assert.ok(
+        /:track:/.test(item.audiopath),
+        `expected a track audiopath, got ${item.audiopath}`,
+      );
+      assert.ok(
+        !/:album:/.test(item.audiopath),
+        `album leaked into queue: ${item.audiopath}`,
+      );
+    }
+    assert.ok(calls.includes('artist:123'));
+    assert.ok(calls.includes('album:al.1'));
+    assert.ok(calls.includes('album:al.2'));
+  });
+
+  test(`${service} playlist favorite stays a direct track queue without an extra browse`, async () => {
+    const playlistPath = `${service}:playlist:p.9`;
+    const { qc, calls } = makeNativeQueueController(service, (folderId) =>
+      folderId === 'playlist:p.9'
+        ? makeFolder([
+          nativeTrack(service, 't.1', 'Album al.9'),
+          nativeTrack(service, 't.2', 'Album al.9'),
+        ])
+        : null,
+    );
+
+    const queue = await qc.buildQueueForUri(playlistPath, 'Zone', undefined, playlistPath);
+
+    assert.equal(queue.length, 2);
+    // Items are already tracks, so no container sub-browse happens.
+    assert.deepEqual(calls, ['playlist:p.9']);
+  });
+}

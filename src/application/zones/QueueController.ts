@@ -20,6 +20,15 @@ import type { ZoneState } from '@/domain/zones/zoneState';
 import type { QueueAuthority, QueueItem, ZoneContext } from '@/application/zones/internal/zoneTypes';
 import { ZoneRepository } from '@/application/zones/ZoneRepository';
 
+/**
+ * Bridged streaming services whose queues are built the same way, in the order
+ * they are tried.
+ *
+ * A subset of BRIDGE_STREAMING_SERVICES: `youtube` is bridged too but has never
+ * had queue handling of its own here and still falls through to Spotify.
+ */
+const BRIDGE_QUEUE_SERVICES = ['applemusic', 'deezer', 'tidal', 'ytmusic', 'soundcloud'] as const;
+
 type QueueControllerDeps = {
   log: ComponentLogger;
   contentPort: ContentPort;
@@ -383,6 +392,7 @@ export class QueueController {
     items: ContentFolderItem[],
     providerId: string,
     user: string,
+    service: string,
     maxItems?: number,
   ): Promise<ContentFolderItem[]> {
     const cap = maxItems && maxItems > 0 ? maxItems : 500;
@@ -397,7 +407,7 @@ export class QueueController {
         tracks.push(item);
         continue;
       }
-      const subFolderId = stripProviderPrefix(audiopath);
+      const subFolderId = stripProviderPrefix(audiopath, service);
       if (!subFolderId) {
         continue;
       }
@@ -423,6 +433,100 @@ export class QueueController {
     // If nothing was expanded (all items were already tracks, or no container
     // yielded tracks), keep the original list so behaviour is never worse.
     return expandedAny ? tracks : items;
+  }
+
+  /**
+   * Page through a service folder and collect its items.
+   *
+   * Stops at the caller's cap, at a short page, or at a hard 1000-item ceiling
+   * that keeps "play my whole library" from pulling everything into one queue.
+   */
+  private async collectServiceFolderItems(
+    providerId: string,
+    user: string,
+    folderId: string,
+    maxItems?: number,
+  ): Promise<ContentFolderItem[]> {
+    const allItems: ContentFolderItem[] = [];
+    const pageSize = 50;
+    let offset = 0;
+    let total = Number.MAX_SAFE_INTEGER;
+    while (offset < total) {
+      const folder = await this.contentPort.getServiceFolder(providerId, user, folderId, offset, pageSize);
+      const items = folder?.items ?? [];
+      if (items.length === 0) {
+        break;
+      }
+      allItems.push(...items);
+      total = Number.isFinite(folder?.totalitems) ? folder!.totalitems : Number.MAX_SAFE_INTEGER;
+      offset += items.length;
+      if (items.length < pageSize) {
+        break;
+      }
+      if (maxItems && allItems.length >= maxItems) {
+        break;
+      }
+      if (allItems.length >= 1000) {
+        break;
+      }
+    }
+    return allItems;
+  }
+
+  /**
+   * Queue items for one bridged streaming service, or null when it has nothing
+   * for this audiopath and the caller should try the next candidate.
+   *
+   * Apple Music, Deezer, Tidal, YouTube Music and SoundCloud are reached through
+   * the identical pair of content-port calls, so they share one implementation.
+   * They used to have a branch each, copied from the Apple one — and the copies
+   * drifted: only Apple flattened containers, so playing a Deezer/Tidal/YTM/
+   * SoundCloud *artist* queued the albums its listing returns and every one of
+   * them was rejected downstream, where the stream services accept nothing but a
+   * track. One implementation is what stops that from happening again.
+   */
+  private async buildBridgeQueueItems(args: {
+    service: string;
+    rawClean: string;
+    sourcePath: string;
+    zoneName: string;
+    station?: string;
+    maxItems?: number;
+    defaultSpotifyUserId?: string | null;
+  }): Promise<QueueItem[] | null> {
+    const { service, rawClean, sourcePath, zoneName, station, maxItems, defaultSpotifyUserId } = args;
+    const providerId = rawClean.split(':')[0] || service;
+    const user = providerId.split('@')[1] ?? service;
+    const folderId = stripProviderPrefix(sourcePath, service);
+
+    // A track audiopath resolves straight to its item. `library-track` is
+    // accepted for every service, not just Apple: the kind is a domain concept
+    // (see KNOWN_KINDS in audiopath.ts) and the id keeps whichever form it came
+    // in as, so the provider sees exactly what it was asked for.
+    if (/^(library-)?track:/i.test(folderId)) {
+      const kind = folderId.split(':')[0] ?? 'track';
+      const trackId = folderId.split(':').slice(1).join(':');
+      const track = await this.contentPort.getServiceTrack(providerId, user, `${kind}:${trackId}`);
+      if (track) {
+        return mapFolderItemsToQueue([track], zoneName, 5, user, undefined, defaultSpotifyUserId);
+      }
+      this.log.debug('bridge queue track lookup failed', {
+        service,
+        providerId,
+        folderId,
+        trackId,
+      });
+    }
+
+    const allItems = await this.collectServiceFolderItems(providerId, user, folderId, maxItems);
+    if (!allItems.length) {
+      return null;
+    }
+    // Browsing an artist returns albums, not tracks; flatten any container items
+    // down to their tracks so the favourite plays through like a playlist.
+    const playable = await this.flattenContainersToTracks(allItems, providerId, user, service, maxItems);
+    const trimmed = maxItems ? playable.slice(0, maxItems) : playable;
+    return mapFolderItemsToQueue(trimmed, zoneName, 5, user, station ?? rawClean, defaultSpotifyUserId);
   }
 
   public async buildQueueForUri(
@@ -476,11 +580,6 @@ export class QueueController {
         : isMusicAssistant
           ? 'musicassistant'
           : detectServiceFromAudiopath(rawPath));
-    const isAppleMusic = !forceSpotify && (service === 'applemusic' || /applemusic/i.test(rawPath));
-    const isDeezer = !forceSpotify && (service === 'deezer' || /deezer/i.test(rawPath));
-    const isTidal = !forceSpotify && (service === 'tidal' || /tidal/i.test(rawPath));
-    const isYtMusic = !forceSpotify && (service === 'ytmusic' || /ytmusic/i.test(rawPath));
-    const isSoundcloud = !forceSpotify && (service === 'soundcloud' || /soundcloud/i.test(rawPath));
     const defaultSpotifyUserId = this.contentPort.getDefaultSpotifyAccountId();
 
     // Local library content. Guard against bridge-routed content whose inner
@@ -526,295 +625,38 @@ export class QueueController {
           return mapFolderItemsToQueue([track], zoneName, 5, user, undefined, defaultSpotifyUserId);
         }
       }
-      const allItems: ContentFolderItem[] = [];
-      const pageSize = 50;
-      let offset = 0;
-      let total = Number.MAX_SAFE_INTEGER;
-      while (offset < total) {
-        const folder = await this.contentPort.getServiceFolder('musicassistant', user, folderId, offset, pageSize);
-        const items = folder?.items ?? [];
-        if (items.length === 0) {
-          break;
-        }
-        allItems.push(...items);
-        total = Number.isFinite(folder?.totalitems) ? folder!.totalitems : Number.MAX_SAFE_INTEGER;
-        offset += items.length;
-        if (items.length < pageSize) {
-          break;
-        }
-        if (maxItems && allItems.length >= maxItems) {
-          break;
-        }
-        if (allItems.length >= 1000) {
-          break;
-        }
-      }
+      const allItems = await this.collectServiceFolderItems('musicassistant', user, folderId, maxItems);
       if (allItems.length) {
         const trimmed = maxItems ? allItems.slice(0, maxItems) : allItems;
         return mapFolderItemsToQueue(trimmed, zoneName, 5, user, station ?? rawClean, defaultSpotifyUserId);
       }
     }
 
-    // Apple Music bridge content
-    if (!forceSpotify && (isAppleMusic || service === 'applemusic' || /applemusic/i.test(rawPath))) {
-      const providerId = rawClean.split(':')[0] || 'applemusic';
-      const user = providerId.split('@')[1] ?? 'applemusic';
-      const sourcePath = pickSourcePath();
-      const folderId = sourcePath
-        .replace(/^spotify@[^:]+:/i, '')
-        .replace(/^applemusic@[^:]+:/i, '')
-        .replace(/^spotify:/i, '')
-        .replace(/^applemusic:/i, '');
-      if (/^(library-)?track:/i.test(folderId)) {
-        const trackId = folderId.split(':').slice(1).join(':');
-        const track = await this.contentPort.getServiceTrack(
-          providerId,
-          user,
-          `${folderId.split(':')[0]}:${trackId}`,
-        );
-        if (track) {
-          return mapFolderItemsToQueue([track], zoneName, 5, user, undefined, defaultSpotifyUserId);
+    // Bridge content for the streaming services that are all browsed through the
+    // same two content-port calls. Consulted in the order they are listed, and a
+    // service that matches but yields nothing falls through to the next and then
+    // to Spotify below — which is what the five separate `if` blocks this
+    // replaces did. `youtube` is a bridge service too (see
+    // BRIDGE_STREAMING_SERVICES) but never had a branch here, so it keeps
+    // falling through to Spotify; giving it one is a behaviour change, not a
+    // cleanup, and belongs in its own commit.
+    if (!forceSpotify) {
+      for (const bridgeService of BRIDGE_QUEUE_SERVICES) {
+        if (service !== bridgeService && !new RegExp(bridgeService, 'i').test(rawPath)) {
+          continue;
         }
-        this.log.debug('apple music queue track lookup failed', {
-          providerId,
-          folderId,
-          trackId,
+        const items = await this.buildBridgeQueueItems({
+          service: bridgeService,
+          rawClean,
+          sourcePath: pickSourcePath(),
+          zoneName,
+          station,
+          maxItems,
+          defaultSpotifyUserId,
         });
-      }
-      const allItems: ContentFolderItem[] = [];
-      const pageSize = 50;
-      let offset = 0;
-      let total = Number.MAX_SAFE_INTEGER;
-      while (offset < total) {
-        const folder = await this.contentPort.getServiceFolder(providerId, user, folderId, offset, pageSize);
-        const items = folder?.items ?? [];
-        if (items.length === 0) {
-          break;
+        if (items) {
+          return items;
         }
-        allItems.push(...items);
-        total = Number.isFinite(folder?.totalitems) ? folder!.totalitems : Number.MAX_SAFE_INTEGER;
-        offset += items.length;
-        if (items.length < pageSize) {
-          break;
-        }
-        if (maxItems && allItems.length >= maxItems) {
-          break;
-        }
-        if (allItems.length >= 1000) {
-          break;
-        }
-      }
-      if (allItems.length) {
-        // Browsing a library artist returns albums, not tracks; flatten any
-        // container items down to their tracks so the favourite plays through
-        // like a playlist (the stream service only accepts track audiopaths).
-        const playable = await this.flattenContainersToTracks(allItems, providerId, user, maxItems);
-        const trimmed = maxItems ? playable.slice(0, maxItems) : playable;
-        return mapFolderItemsToQueue(trimmed, zoneName, 5, user, station ?? rawClean, defaultSpotifyUserId);
-      }
-    }
-
-    // Deezer bridge content
-    if (!forceSpotify && (isDeezer || service === 'deezer' || /deezer/i.test(rawPath))) {
-      const providerId = rawClean.split(':')[0] || 'deezer';
-      const user = providerId.split('@')[1] ?? 'deezer';
-      const sourcePath = pickSourcePath();
-      const folderId = sourcePath
-        .replace(/^spotify@[^:]+:/i, '')
-        .replace(/^deezer@[^:]+:/i, '')
-        .replace(/^spotify:/i, '')
-        .replace(/^deezer:/i, '');
-      if (/^track:/i.test(folderId)) {
-        const trackId = folderId.split(':').slice(1).join(':');
-        const track = await this.contentPort.getServiceTrack(providerId, user, `track:${trackId}`);
-        if (track) {
-          return mapFolderItemsToQueue([track], zoneName, 5, user, undefined, defaultSpotifyUserId);
-        }
-        this.log.debug('deezer queue track lookup failed', {
-          providerId,
-          folderId,
-          trackId,
-        });
-      }
-      const allItems: ContentFolderItem[] = [];
-      const pageSize = 50;
-      let offset = 0;
-      let total = Number.MAX_SAFE_INTEGER;
-      while (offset < total) {
-        const folder = await this.contentPort.getServiceFolder(providerId, user, folderId, offset, pageSize);
-        const items = folder?.items ?? [];
-        if (items.length === 0) {
-          break;
-        }
-        allItems.push(...items);
-        total = Number.isFinite(folder?.totalitems) ? folder!.totalitems : Number.MAX_SAFE_INTEGER;
-        offset += items.length;
-        if (items.length < pageSize) {
-          break;
-        }
-        if (maxItems && allItems.length >= maxItems) {
-          break;
-        }
-        if (allItems.length >= 1000) {
-          break;
-        }
-      }
-      if (allItems.length) {
-        const trimmed = maxItems ? allItems.slice(0, maxItems) : allItems;
-        return mapFolderItemsToQueue(trimmed, zoneName, 5, user, station ?? rawClean, defaultSpotifyUserId);
-      }
-    }
-
-    // Tidal bridge content
-    if (!forceSpotify && (isTidal || service === 'tidal' || /tidal/i.test(rawPath))) {
-      const providerId = rawClean.split(':')[0] || 'tidal';
-      const user = providerId.split('@')[1] ?? 'tidal';
-      const sourcePath = pickSourcePath();
-      const folderId = sourcePath
-        .replace(/^spotify@[^:]+:/i, '')
-        .replace(/^tidal@[^:]+:/i, '')
-        .replace(/^spotify:/i, '')
-        .replace(/^tidal:/i, '');
-      if (/^track:/i.test(folderId)) {
-        const trackId = folderId.split(':').slice(1).join(':');
-        const track = await this.contentPort.getServiceTrack(providerId, user, `track:${trackId}`);
-        if (track) {
-          return mapFolderItemsToQueue([track], zoneName, 5, user, undefined, defaultSpotifyUserId);
-        }
-        this.log.debug('tidal queue track lookup failed', {
-          providerId,
-          folderId,
-          trackId,
-        });
-      }
-      const allItems: ContentFolderItem[] = [];
-      const pageSize = 50;
-      let offset = 0;
-      let total = Number.MAX_SAFE_INTEGER;
-      while (offset < total) {
-        const folder = await this.contentPort.getServiceFolder(providerId, user, folderId, offset, pageSize);
-        const items = folder?.items ?? [];
-        if (items.length === 0) {
-          break;
-        }
-        allItems.push(...items);
-        total = Number.isFinite(folder?.totalitems) ? folder!.totalitems : Number.MAX_SAFE_INTEGER;
-        offset += items.length;
-        if (items.length < pageSize) {
-          break;
-        }
-        if (maxItems && allItems.length >= maxItems) {
-          break;
-        }
-        if (allItems.length >= 1000) {
-          break;
-        }
-      }
-      if (allItems.length) {
-        const trimmed = maxItems ? allItems.slice(0, maxItems) : allItems;
-        return mapFolderItemsToQueue(trimmed, zoneName, 5, user, station ?? rawClean, defaultSpotifyUserId);
-      }
-    }
-
-    // YouTube Music bridge content
-    if (!forceSpotify && (isYtMusic || service === 'ytmusic' || /ytmusic/i.test(rawPath))) {
-      const providerId = rawClean.split(':')[0] || 'ytmusic';
-      const user = providerId.split('@')[1] ?? 'ytmusic';
-      const sourcePath = pickSourcePath();
-      const folderId = sourcePath
-        .replace(/^spotify@[^:]+:/i, '')
-        .replace(/^ytmusic@[^:]+:/i, '')
-        .replace(/^spotify:/i, '')
-        .replace(/^ytmusic:/i, '');
-      if (/^track:/i.test(folderId)) {
-        const trackId = folderId.split(':').slice(1).join(':');
-        const track = await this.contentPort.getServiceTrack(providerId, user, `track:${trackId}`);
-        if (track) {
-          return mapFolderItemsToQueue([track], zoneName, 5, user, undefined, defaultSpotifyUserId);
-        }
-        this.log.debug('ytmusic queue track lookup failed', {
-          providerId,
-          folderId,
-          trackId,
-        });
-      }
-      const allItems: ContentFolderItem[] = [];
-      const pageSize = 50;
-      let offset = 0;
-      let total = Number.MAX_SAFE_INTEGER;
-      while (offset < total) {
-        const folder = await this.contentPort.getServiceFolder(providerId, user, folderId, offset, pageSize);
-        const items = folder?.items ?? [];
-        if (items.length === 0) {
-          break;
-        }
-        allItems.push(...items);
-        total = Number.isFinite(folder?.totalitems) ? folder!.totalitems : Number.MAX_SAFE_INTEGER;
-        offset += items.length;
-        if (items.length < pageSize) {
-          break;
-        }
-        if (maxItems && allItems.length >= maxItems) {
-          break;
-        }
-        if (allItems.length >= 1000) {
-          break;
-        }
-      }
-      if (allItems.length) {
-        const trimmed = maxItems ? allItems.slice(0, maxItems) : allItems;
-        return mapFolderItemsToQueue(trimmed, zoneName, 5, user, station ?? rawClean, defaultSpotifyUserId);
-      }
-    }
-
-    // SoundCloud bridge content
-    if (!forceSpotify && (isSoundcloud || service === 'soundcloud' || /soundcloud/i.test(rawPath))) {
-      const providerId = rawClean.split(':')[0] || 'soundcloud';
-      const user = providerId.split('@')[1] ?? 'soundcloud';
-      const sourcePath = pickSourcePath();
-      const folderId = sourcePath
-        .replace(/^spotify@[^:]+:/i, '')
-        .replace(/^soundcloud@[^:]+:/i, '')
-        .replace(/^spotify:/i, '')
-        .replace(/^soundcloud:/i, '');
-      if (/^track:/i.test(folderId)) {
-        const trackId = folderId.split(':').slice(1).join(':');
-        const track = await this.contentPort.getServiceTrack(providerId, user, `track:${trackId}`);
-        if (track) {
-          return mapFolderItemsToQueue([track], zoneName, 5, user, undefined, defaultSpotifyUserId);
-        }
-        this.log.debug('soundcloud queue track lookup failed', {
-          providerId,
-          folderId,
-          trackId,
-        });
-      }
-      const allItems: ContentFolderItem[] = [];
-      const pageSize = 50;
-      let offset = 0;
-      let total = Number.MAX_SAFE_INTEGER;
-      while (offset < total) {
-        const folder = await this.contentPort.getServiceFolder(providerId, user, folderId, offset, pageSize);
-        const items = folder?.items ?? [];
-        if (items.length === 0) {
-          break;
-        }
-        allItems.push(...items);
-        total = Number.isFinite(folder?.totalitems) ? folder!.totalitems : Number.MAX_SAFE_INTEGER;
-        offset += items.length;
-        if (items.length < pageSize) {
-          break;
-        }
-        if (maxItems && allItems.length >= maxItems) {
-          break;
-        }
-        if (allItems.length >= 1000) {
-          break;
-        }
-      }
-      if (allItems.length) {
-        const trimmed = maxItems ? allItems.slice(0, maxItems) : allItems;
-        return mapFolderItemsToQueue(trimmed, zoneName, 5, user, station ?? rawClean, defaultSpotifyUserId);
       }
     }
 
@@ -1292,11 +1134,21 @@ function isPlayableTrackAudiopath(audiopath: string | undefined): boolean {
   return /:(library-)?track:/i.test(audiopath);
 }
 
-/** Strips a `<provider>@<account>:` or `<provider>:` prefix down to the `kind:id` folder id. */
-function stripProviderPrefix(audiopath: string): string {
-  return audiopath
-    .replace(/^spotify@[^:]+:/i, '')
-    .replace(/^applemusic@[^:]+:/i, '')
-    .replace(/^spotify:/i, '')
-    .replace(/^applemusic:/i, '');
+/**
+ * Strips a `<provider>@<account>:` or `<provider>:` prefix down to the
+ * `kind:id` folder id.
+ *
+ * `spotify` is always stripped because every bridged service also travels in
+ * the Loxone-facing `spotify@<bridgeId>:` disguise; `service` names the real
+ * one, and must be passed or the path keeps its own prefix and the provider is
+ * handed a folder id it cannot resolve.
+ */
+function stripProviderPrefix(audiopath: string, service?: string): string {
+  let stripped = audiopath.replace(/^spotify@[^:]+:/i, '').replace(/^spotify:/i, '');
+  if (service) {
+    stripped = stripped
+      .replace(new RegExp(`^${service}@[^:]+:`, 'i'), '')
+      .replace(new RegExp(`^${service}:`, 'i'), '');
+  }
+  return stripped;
 }
