@@ -49,12 +49,12 @@ export type ResolvedPlayRequest = {
   queueAudiopath: string;
   isMusicAssistantInitial: boolean;
   isMusicAssistant: boolean;
-  isAppleMusic: boolean;
-  isDeezer: boolean;
-  isTidal: boolean;
-  isYtMusic: boolean;
-  isYoutube: boolean;
-  isSoundcloud: boolean;
+  /**
+   * Which service owns this request, or null when nothing bridged does. Ask it
+   * by property — isBridgeQueueService, hasSlowStreamResolution — rather than
+   * comparing it to a name, unless the rule really is about that one service.
+   */
+  provider: string | null;
   isSpotify: boolean;
   nextInput: ZoneContext['inputMode'];
   stationValue: string;
@@ -64,10 +64,4 @@ export type ResolvedPlayRequest = {
   shouldLimitQueueBuild: boolean;
   queueBuildLimit?: number;
   isLineIn: boolean;
-  isAppleMusicUri: boolean;
-  isDeezerUri: boolean;
-  isTidalUri: boolean;
-  isYtMusicUri: boolean;
-  isYoutubeUri: boolean;
-  isSoundcloudUri: boolean;
 };

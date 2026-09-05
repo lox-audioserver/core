@@ -69,12 +69,6 @@ export function resolvePlayRequest(args: {
   const owner =
     audioHelpers.providerForAudiopath(queueAudiopath) ??
     audioHelpers.providerForAudiopath(resolvedTarget);
-  const isAppleMusic = owner === 'applemusic';
-  const isDeezer = owner === 'deezer';
-  const isTidal = owner === 'tidal';
-  const isYtMusic = owner === 'ytmusic';
-  const isYoutube = owner === 'youtube';
-  const isSoundcloud = owner === 'soundcloud';
   const isSpotify = audioHelpers.isSpotifyAudiopath(queueAudiopath);
   const nextInput = isSpotify
     ? 'spotify'
@@ -105,7 +99,7 @@ export function resolvePlayRequest(args: {
     stationValue = audioHelpers.deriveRadioStationLabel(stationValue) ?? stationValue;
   }
 
-  const queueSourcePath = isAppleMusic && parentContext?.parent ? parentContext.parent : uri;
+  const queueSourcePath = owner === 'applemusic' && parentContext?.parent ? parentContext.parent : uri;
   const targetForQueueBuild = normalizeSpotifyAudiopath(resolvedTarget || '');
   const shouldLimitQueueBuild = Boolean(
     targetForQueueBuild && /(library-)?(album|playlist|artist):/i.test(targetForQueueBuild),
@@ -131,12 +125,7 @@ export function resolvePlayRequest(args: {
     queueAudiopath,
     isMusicAssistantInitial,
     isMusicAssistant,
-    isAppleMusic,
-    isDeezer,
-    isTidal,
-    isYtMusic,
-    isYoutube,
-    isSoundcloud,
+    provider: owner,
     isSpotify,
     nextInput,
     stationValue,
@@ -146,11 +135,5 @@ export function resolvePlayRequest(args: {
     shouldLimitQueueBuild,
     queueBuildLimit,
     isLineIn,
-    isAppleMusicUri: uriProvider === 'applemusic',
-    isDeezerUri: uriProvider === 'deezer',
-    isTidalUri: uriProvider === 'tidal',
-    isYtMusicUri: uriProvider === 'ytmusic',
-    isYoutubeUri: uriProvider === 'youtube',
-    isSoundcloudUri: uriProvider === 'soundcloud',
   };
 }

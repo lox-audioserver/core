@@ -41,6 +41,7 @@ import './flacFrameSplitter.test';
 import './engine/pipeSourceAdapter.test';
 import './playbackRefactorSeams.test';
 import './playbackCoordinator.characterization.test';
+import './playRequestProviderTraits.test';
 import './webdavPaths.test';
 import './beoremoteMenu.test';
 import './beoremoteApi.test';

@@ -118,6 +118,44 @@ export const BRIDGE_STREAMING_SERVICES = new Set([
 ]);
 
 /**
+ * The bridged services that have queue handling: a folder of theirs can be
+ * browsed and turned into a queue, and playback treats the result as service
+ * content rather than as a local file.
+ *
+ * An ordered subset of {@link BRIDGE_STREAMING_SERVICES} — `youtube` is bridged
+ * but has never had queue handling and falls through to the Spotify path. Kept
+ * as an array because the order is the order the queue builder tries them in.
+ */
+export const BRIDGE_QUEUE_SERVICES = [
+  'applemusic',
+  'deezer',
+  'tidal',
+  'ytmusic',
+  'soundcloud',
+] as const;
+
+const BRIDGE_QUEUE_SERVICE_SET: ReadonlySet<string> = new Set(BRIDGE_QUEUE_SERVICES);
+
+/** Whether this service's content is queued as service content. */
+export function isBridgeQueueService(service: string | null | undefined): boolean {
+  return service != null && BRIDGE_QUEUE_SERVICE_SET.has(service);
+}
+
+/**
+ * Services whose stream URL is resolved by yt-dlp, which takes 5-7 s.
+ *
+ * Long enough that a caller must show the listener something in the meantime,
+ * and long enough that a play cannot be treated as immediate. Membership is
+ * about how slow the resolve is, not about which service it is: one that stops
+ * needing yt-dlp leaves the set and nothing else moves.
+ */
+const SLOW_STREAM_RESOLUTION_SERVICES: ReadonlySet<string> = new Set(['ytmusic', 'youtube']);
+
+export function hasSlowStreamResolution(service: string | null | undefined): boolean {
+  return service != null && SLOW_STREAM_RESOLUTION_SERVICES.has(service);
+}
+
+/**
  * Lightweight provider detection for Loxone audiopaths.
  */
 export function detectServiceFromAudiopath(

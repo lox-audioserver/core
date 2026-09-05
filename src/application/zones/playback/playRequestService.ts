@@ -10,7 +10,7 @@ import type { RecentsManager } from '@/application/zones/recents/recentsManager'
 import type { ZoneRepository } from '@/application/zones/ZoneRepository';
 import type { ZoneAudioHelpers } from '@/application/zones/internal/zoneAudioHelpers';
 import { QueueController as ZoneQueueController } from '@/application/zones/QueueController';
-import { decodeAudiopath, encodeAudiopath } from '@/domain/zones/audiopath';
+import { decodeAudiopath, encodeAudiopath, hasSlowStreamResolution, isBridgeQueueService } from '@/domain/zones/audiopath';
 import {
   normalizeSpotifyAudiopath,
   sanitizeStation,
@@ -117,7 +117,7 @@ export class PlayRequestService {
 
     this.deps.audioManager.markPlayRequest(zoneId, { uri, type });
 
-    if (req.isYoutube || req.isYtMusic) {
+    if (hasSlowStreamResolution(req.provider)) {
       this.deps.notifier.notifyZoneStateChanged({
         ...ctx.state,
         mode: 'play',
@@ -180,7 +180,7 @@ export class PlayRequestService {
     if (req.isRadio || req.isLineIn || req.isMusicAssistant) {
       return;
     }
-    if (!req.isAppleMusic && !req.isDeezer && !req.isTidal && !req.isYtMusic && !req.isSoundcloud) {
+    if (!isBridgeQueueService(req.provider)) {
       return;
     }
     const audiopath = req.parentContext?.startItem ?? req.queueAudiopath;
@@ -278,11 +278,7 @@ export class PlayRequestService {
         queueAudiopath: req.queueAudiopath,
         parentContext: req.parentContext,
         isRadio: req.isRadio,
-        isAppleMusic: req.isAppleMusic,
-        isDeezer: req.isDeezer,
-        isTidal: req.isTidal,
-        isYtMusic: req.isYtMusic,
-        isSoundcloud: req.isSoundcloud,
+        provider: req.provider,
         isMusicAssistant: req.isMusicAssistant,
         isLineIn: req.isLineIn,
         queueBuildLimit: req.queueBuildLimit,
@@ -299,7 +295,7 @@ export class PlayRequestService {
         parentContext: req.parentContext,
         isRadio: req.isRadio,
         isMusicAssistant: req.isMusicAssistant,
-        isAppleMusic: req.isAppleMusic,
+        isAppleMusic: req.provider === 'applemusic',
         stationValue: req.stationValue,
         incoming: metadata,
       }),
@@ -312,7 +308,7 @@ export class PlayRequestService {
       queueSourcePath: req.queueSourcePath,
       resolvedTarget: req.resolvedTarget,
       expandedCount: queueBuild.expandedCount,
-      isAppleMusic: req.isAppleMusic,
+      provider: req.provider,
       isMusicAssistant: req.isMusicAssistant,
     });
     const queueItems = queueBuild.items;
@@ -328,7 +324,7 @@ export class PlayRequestService {
     ctx.queueController.setItems(queueItems, clampedIndex);
     ctx.metadata.queueShuffled = false;
     const immediateCurrent = ctx.queueController.current();
-    if (immediateCurrent && !req.isYoutube && !req.isYtMusic) {
+    if (immediateCurrent && !hasSlowStreamResolution(req.provider)) {
       const immediatePatch = buildQueueItemPlaybackPatch(
         ctx,
         immediateCurrent,
@@ -397,7 +393,7 @@ export class PlayRequestService {
     // take 4-5 s before audio starts in sink mode.
     const hasMaOutput = ctx.outputs.some((output) => output.type === 'musicassistant');
     const maSinkFastPath = req.isMusicAssistant && hasMaOutput;
-    if (!maSinkFastPath && !req.isAppleMusic && !req.isDeezer && !req.isTidal && !req.isYtMusic && !req.isSoundcloud) {
+    if (!maSinkFastPath && !isBridgeQueueService(req.provider)) {
       return false;
     }
     if (requestType !== 'serviceplay') {
@@ -490,10 +486,7 @@ export class PlayRequestService {
   private setQueueAuthorityForRequest(ctx: ZoneContext, req: ResolvedPlayRequest): void {
     ctx.queue.authority = resolveQueueAuthority({
       isMusicAssistant: req.isMusicAssistant,
-      isAppleMusic: req.isAppleMusic,
-      isDeezer: req.isDeezer,
-      isTidal: req.isTidal,
-      isSoundcloud: req.isSoundcloud,
+      provider: req.provider,
     });
   }
 
@@ -525,7 +518,7 @@ export class PlayRequestService {
       // Now-playing must describe the item actually being started (`current`), not
       // the play-request seed (which for a container favourite is the container).
       const nowPlaying = selectQueuePlaybackMetadata(current, enrichedMetadata, {
-        itemFirst: !req.isYoutube && !req.isYtMusic,
+        itemFirst: !hasSlowStreamResolution(req.provider),
         fallbackTitle: ctx.name,
       });
       const session = await this.deps.startQueuePlayback(

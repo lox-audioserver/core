@@ -2,7 +2,7 @@ import type { ComponentLogger } from '@/shared/logging/logger';
 import type { ContentFolderItem } from '@/ports/ContentTypes';
 import type { ContentPort } from '@/ports/ContentPort';
 import type { NotifierPort } from '@/ports/NotifierPort';
-import { decodeAudiopath, detectServiceFromAudiopath, parseServiceNativeAudiopath, BRIDGE_STREAMING_SERVICES } from '@/domain/zones/audiopath';
+import { decodeAudiopath, detectServiceFromAudiopath, parseServiceNativeAudiopath, BRIDGE_STREAMING_SERVICES, BRIDGE_QUEUE_SERVICES } from '@/domain/zones/audiopath';
 import { toServiceNative } from '@/domain/zones/bridgeIdentity';
 import {
   createQueueItem,
@@ -19,15 +19,6 @@ import {
 import type { ZoneState } from '@/domain/zones/zoneState';
 import type { QueueAuthority, QueueItem, ZoneContext } from '@/application/zones/internal/zoneTypes';
 import { ZoneRepository } from '@/application/zones/ZoneRepository';
-
-/**
- * Bridged streaming services whose queues are built the same way, in the order
- * they are tried.
- *
- * A subset of BRIDGE_STREAMING_SERVICES: `youtube` is bridged too but has never
- * had queue handling of its own here and still falls through to Spotify.
- */
-const BRIDGE_QUEUE_SERVICES = ['applemusic', 'deezer', 'tidal', 'ytmusic', 'soundcloud'] as const;
 
 type QueueControllerDeps = {
   log: ComponentLogger;

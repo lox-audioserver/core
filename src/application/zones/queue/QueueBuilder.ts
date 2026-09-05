@@ -1,6 +1,7 @@
 import type { PlaybackMetadata } from '@/ports/types/playback';
 import { createQueueItem, normalizeSpotifyAudiopath, sanitizeStation } from '@/application/zones/helpers/queueHelpers';
 import { clamp } from '@/application/zones/helpers/stateHelpers';
+import { isBridgeQueueService } from '@/domain/zones/audiopath';
 import type { QueueItem } from '@/ports/types/queueTypes';
 import type { ContentPort } from '@/ports/ContentPort';
 import type { ZoneAudioHelpers } from '@/application/zones/internal/zoneAudioHelpers';
@@ -18,11 +19,8 @@ export type QueueBuildRequest = {
   queueAudiopath: string;
   parentContext: ParentContext | null;
   isRadio: boolean;
-  isAppleMusic: boolean;
-  isDeezer?: boolean;
-  isTidal?: boolean;
-  isYtMusic?: boolean;
-  isSoundcloud?: boolean;
+  /** Which service owns the request; null when nothing bridged does. */
+  provider?: string | null;
   isMusicAssistant: boolean;
   isLineIn?: boolean;
   queueBuildLimit?: number;
@@ -60,7 +58,7 @@ export async function buildQueueForRequest(args: {
   const fallbackAudiopath = request.parentContext?.startItem ?? request.queueAudiopath;
   const queueAudioType = request.isLineIn
     ? 3
-    : request.isMusicAssistant || request.isAppleMusic || request.isDeezer || request.isTidal || request.isYtMusic || request.isSoundcloud
+    : request.isMusicAssistant || isBridgeQueueService(request.provider)
       ? 5
       : request.isRadio
         ? 1

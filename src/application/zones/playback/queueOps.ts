@@ -13,18 +13,30 @@ export function findQueueIndexByUri(items: QueueItem[], uri: string | undefined)
 }
 
 /**
+ * Services that keep the queue local even when the path also looks like Music
+ * Assistant's — the two tests disagree (one reads the provider registry, the
+ * other the audiopath prefix), and for these the registry wins.
+ *
+ * Note this is BRIDGE_QUEUE_SERVICES minus `ytmusic`. Whether that omission is
+ * deliberate is not recorded anywhere; it is preserved here rather than quietly
+ * changed, because it only bites a path that both tests claim.
+ */
+const FORCE_LOCAL_QUEUE_SERVICES: ReadonlySet<string> = new Set([
+  'applemusic',
+  'deezer',
+  'tidal',
+  'soundcloud',
+]);
+
+/**
  * Which side owns the queue for a play request. Spotify is absent on purpose: it
  * plays through our own Connect host, so we drive its queue like any local one.
  */
 export function resolveQueueAuthority(args: {
   isMusicAssistant: boolean;
-  isAppleMusic: boolean;
-  isDeezer: boolean;
-  isTidal: boolean;
-  isSoundcloud: boolean;
+  provider: string | null;
 }): QueueAuthority {
-  const forceLocalQueue =
-    args.isAppleMusic || args.isDeezer || args.isTidal || args.isSoundcloud;
+  const forceLocalQueue = args.provider != null && FORCE_LOCAL_QUEUE_SERVICES.has(args.provider);
   if (forceLocalQueue) {
     return 'local';
   }

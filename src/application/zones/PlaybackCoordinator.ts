@@ -4,6 +4,7 @@ import type { PlaybackSource } from '@/ports/EngineTypes';
 import type { ZoneAudioPreferences } from '@/application/playback/ZoneAudioPreferences';
 import type { ZoneState } from '@/domain/zones/zoneState';
 import { toServiceNative } from '@/domain/zones/bridgeIdentity';
+import { hasSlowStreamResolution } from '@/domain/zones/audiopath';
 import type { QueueAuthority, ZoneContext } from '@/application/zones/internal/zoneTypes';
 import type { ZoneOutput } from '@/ports/OutputsTypes';
 import type { InputsPort, MusicAssistantInputHandlers } from '@/ports/InputsPort';
@@ -75,19 +76,6 @@ type PlaybackCoordinatorDeps = {
 const UNKNOWN_OUTPUT_LAG_MS = 1000;
 /** How long a measured playout lag stays worth using. */
 const PLAYOUT_LAG_MAX_AGE_MS = 30_000;
-
-/**
- * Providers whose stream URL is resolved by yt-dlp, which takes 5-7 s. Long
- * enough that the app must be shown something in the meantime, so playback
- * broadcasts a Loading… frame before it starts resolving.
- *
- * Membership is about how slow the resolve is, not about which service it is —
- * a provider that stops needing yt-dlp leaves this set and nothing else moves.
- */
-const SLOW_STREAM_RESOLUTION_PROVIDERS: ReadonlySet<ProviderKind> = new Set<ProviderKind>([
-  'ytmusic',
-  'youtube',
-]);
 
 /**
  * What a listener is told when a bridged service's stream never arrives.
@@ -514,7 +502,7 @@ export class PlaybackCoordinator {
     const classification = this.classifyAudiopath(audiopath);
     // Broadcast Loading… immediately so the app shows feedback while the stream
     // URL is still being resolved.
-    if (SLOW_STREAM_RESOLUTION_PROVIDERS.has(classification.provider)) {
+    if (hasSlowStreamResolution(classification.provider)) {
       this.notifier.notifyZoneStateChanged({
         ...ctx.state,
         mode: 'play',
