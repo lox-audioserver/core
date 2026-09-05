@@ -1,3 +1,4 @@
+import type { SoloistAdminPort } from '@/ports/SoloistAdminPort';
 import type { YtMusicAdminPort } from '@/ports/YtMusicAdminPort';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { ComponentLogger } from '@/shared/logging/logger';
@@ -31,6 +32,8 @@ import {
 export type { MusicAssistantConnectionResult };
 
 export type SpotifyHandlerDeps = {
+  /** Soloist's management operations, passed through to the Soloist routes. */
+  soloistAdmin: SoloistAdminPort;
   /**
    * The YouTube stack's management operations; see YtMusicAdminPort.
    *

@@ -1,13 +1,8 @@
+import type { AppleMusicAdminPort } from '@/ports/AppleMusicAdminPort';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import type { ComponentLogger } from '@/shared/logging/logger';
-import {
-  invalidateWidevineArtifactsCache,
-  loadWidevineArtifacts,
-  WidevineArtifactsError,
-} from '@/adapters/content/providers/applemusic/widevine';
-import { getConfiguredDeveloperToken } from '@/adapters/content/providers/applemusic/appleMusicAuth';
 import { ensureDir, resolveDataDir } from '@/shared/utils/file';
 import type { Route } from '@/adapters/http/adminApi/routeTypes';
 
@@ -16,6 +11,13 @@ const MAX_WIDEVINE_CLIENT_ID_BYTES = 10 * 1024 * 1024;
 
 export type AppleMusicHandlerDeps = {
   log: ComponentLogger;
+  /**
+   * Apple Music's management operations; see AppleMusicAdminPort.
+   *
+   * Injected rather than imported: verifying the CDM reads files off disk, and the provider
+   * signalled a bad set by throwing its own error class — which this layer had to know about.
+   */
+  appleMusicAdmin: AppleMusicAdminPort;
   readBinaryBody: (req: IncomingMessage, res: ServerResponse, maxBytes: number) => Promise<Buffer | null>;
   sendJson: (res: ServerResponse, status: number, body: unknown) => void;
   sendHtml: (res: ServerResponse, status: number, html: string) => void;
@@ -54,7 +56,7 @@ async function handleAppleMusicAuth(
   try {
     // Prefer the configured developer token (works with authorize() from any origin); fall back to
     // the scraped web-player token only if it's missing.
-    const developerToken = getConfiguredDeveloperToken() || (await fetchAppleMusicDeveloperToken(deps.log));
+    const developerToken = deps.appleMusicAdmin.configuredDeveloperToken() || (await fetchAppleMusicDeveloperToken(deps.log));
     if (!developerToken) {
       deps.sendHtml(res, 500, renderAppleMusicAuthError('Apple Music token unavailable. Try again.'));
       return;
@@ -76,14 +78,13 @@ async function handleAppleMusicWidevineStatus(
 ): Promise<void> {
   const files = await readWidevineFileStatus();
   try {
-    invalidateWidevineArtifactsCache();
-    await loadWidevineArtifacts();
-    deps.sendJson(res, 200, { ok: true, status: 'valid', files });
-  } catch (err) {
-    if (err instanceof WidevineArtifactsError) {
-      deps.sendJson(res, 200, { ok: false, status: err.code, details: err.details, files });
+    const verdict = await deps.appleMusicAdmin.verifyWidevineArtifacts();
+    if (verdict.ok) {
+      deps.sendJson(res, 200, { ok: true, status: 'valid', files });
       return;
     }
+    deps.sendJson(res, 200, { ok: false, status: verdict.code, details: verdict.details, files });
+  } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     deps.sendJson(res, 200, { ok: false, status: 'error', details: [message], files });
   }
@@ -112,18 +113,12 @@ async function handleAppleMusicWidevineUpload(
   try {
     await ensureDir(cdmDir);
     await fs.writeFile(targetPath, body, { mode: 0o600 });
-    invalidateWidevineArtifactsCache();
-    try {
-      await loadWidevineArtifacts();
-    } catch (err) {
-      if (err instanceof WidevineArtifactsError) {
-        const files = await readWidevineFileStatus();
-        deps.sendJson(res, 200, { ok: false, status: err.code, details: err.details, files });
-        return;
-      }
-      throw err;
-    }
+    const verdict = await deps.appleMusicAdmin.verifyWidevineArtifacts();
     const files = await readWidevineFileStatus();
+    if (!verdict.ok) {
+      deps.sendJson(res, 200, { ok: false, status: verdict.code, details: verdict.details, files });
+      return;
+    }
     deps.sendJson(res, 200, { ok: true, status: 'valid', files });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

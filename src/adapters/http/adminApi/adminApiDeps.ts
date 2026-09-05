@@ -1,3 +1,6 @@
+import type { AppleMusicAdminPort } from '@/ports/AppleMusicAdminPort';
+import type { TuneInUsernameCheck } from '@/adapters/content/providers/tunein/tuneinAdmin';
+import type { SoloistAdminPort } from '@/ports/SoloistAdminPort';
 import type { YtMusicAdminPort } from '@/ports/YtMusicAdminPort';
 import type { OutputDiscoveryPort } from '@/ports/OutputDiscoveryPort';
 import type { AdminApiOptions } from '@/adapters/http/adminApi/adminApiHandler';
@@ -35,6 +38,12 @@ import type { WebdavServer } from '@/adapters/webdav/webdavServer';
  * depended on was to read a fifty-two field bag and follow each name by hand.
  */
 export type AdminSurfaceDeps = {
+  /** Apple Music's management operations; see AppleMusicAdminPort. */
+  appleMusicAdmin: AppleMusicAdminPort;
+  /** Whether a TuneIn username resolves; see the TuneIn admin module. */
+  validateTuneInUsername: (username: string) => Promise<TuneInUsernameCheck>;
+  /** Soloist's management operations; see SoloistAdminPort. */
+  soloistAdmin: SoloistAdminPort;
   /** The YouTube stack's management operations; see YtMusicAdminPort. */
   ytMusicAdmin: YtMusicAdminPort;
   /** Finds playback devices on the network; see OutputDiscoveryPort. */
@@ -79,6 +88,9 @@ export function createAdminApiDeps(
   services: AdminSurfaceServices,
 ): AdminApiOptions {
   return {
+    appleMusicAdmin: deps.appleMusicAdmin,
+    validateTuneInUsername: deps.validateTuneInUsername,
+    soloistAdmin: deps.soloistAdmin,
     ytMusicAdmin: deps.ytMusicAdmin,
     outputDiscovery: deps.outputDiscovery,
     onReinitialize: deps.onReinitialize,

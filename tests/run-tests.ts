@@ -55,6 +55,7 @@ import './libraryUploadFiling.test';
 import './adminApiJsonBody.test';
 import './transportsDiscovery.test';
 import './ytMusicAdminRoutes.test';
+import './integrationAdminRoutes.test';
 import './audioServersAndBearer.test';
 import './outputFactory.airplay.test';
 import './outputFactory.sendspin.test';

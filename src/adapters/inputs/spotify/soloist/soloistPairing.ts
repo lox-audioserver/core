@@ -1,3 +1,4 @@
+import type { SoloistPairingState } from '@/ports/SoloistAdminPort';
 import { createLogger } from '@/shared/logging/logger';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
@@ -23,15 +24,6 @@ const DEFAULT_TIMEOUT_MS = 120_000;
 const SETTLED_TTL_MS = 120_000;
 const MIN_TIMEOUT_MS = 30_000;
 const MAX_TIMEOUT_MS = 300_000;
-
-export type SoloistPairingState = {
-  state: 'idle' | 'pairing' | 'paired' | 'failed';
-  deviceName?: string;
-  expiresAt?: number;
-  /** Whom the store ended up signed in as, as Spotify spells it. */
-  username?: string;
-  error?: string;
-};
 
 type Entry = SoloistPairingState & {
   handle?: { stop: () => void };

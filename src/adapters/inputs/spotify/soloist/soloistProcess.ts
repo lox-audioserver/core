@@ -1,3 +1,4 @@
+import type { SoloistBinaryStatus } from '@/ports/SoloistAdminPort';
 import { spawn, type ChildProcess } from 'node:child_process';
 import fsp from 'node:fs/promises';
 import net from 'node:net';
@@ -177,17 +178,6 @@ export async function storedAccounts(store: SoloistStore): Promise<string[]> {
     return [];
   }
 }
-
-export type SoloistBinaryStatus = {
-  present: boolean;
-  executable: boolean;
-  version?: string;
-  /** Days left before this build stops working, from its own build stamp. Can be negative. */
-  expiresInDays?: number;
-  /** When it stops working, epoch ms. */
-  expiresAt?: number;
-  error?: string;
-};
 
 /** Spotify gives a build ninety days, then it exits with code 10 whatever else is right. */
 export const SOLOIST_BUILD_LIFETIME_DAYS = 90;

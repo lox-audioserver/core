@@ -1,3 +1,4 @@
+import type { TuneInUsernameCheck } from '@/adapters/content/providers/tunein/tuneinAdmin';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { ComponentLogger } from '@/shared/logging/logger';
 import { bestEffort } from '@/shared/bestEffort';
@@ -5,16 +6,18 @@ import type { ContentManager } from '@/adapters/content/contentManager';
 import type { CustomRadioStore } from '@/adapters/content/providers/customRadioStore';
 import type { LoxoneWsNotifier } from '@/adapters/loxone/ws/notifier';
 import type { StorageConfig } from '@/adapters/content/storage/storageManager';
-import { TuneInClient } from '@/adapters/content/providers/tunein/tuneinClient';
-import {
-  countPlayablePresets,
-  expandPresetOutlines,
-} from '@/adapters/content/providers/tunein/tuneinPresets';
 import type { Route } from '@/adapters/http/adminApi/routeTypes';
 import type { WebdavServer } from '@/adapters/webdav/webdavServer';
 
 export type ContentHandlerDeps = {
   log: ComponentLogger;
+  /**
+   * Whether a TuneIn username resolves, and how many playable presets it has.
+   *
+   * A function rather than a port: it is one operation with one caller, and injecting it is what
+   * stops this route from constructing a TuneIn client and reaching for its preset helpers.
+   */
+  validateTuneInUsername: (username: string) => Promise<TuneInUsernameCheck>;
   contentManager: ContentManager;
   customRadioStore: CustomRadioStore;
   loxoneNotifier: LoxoneWsNotifier;
@@ -640,11 +643,8 @@ async function handleTuneInValidate(
     return;
   }
   try {
-    const api = new TuneInClient();
-    const { title, outlines } = await api.browsePresets(username);
-    if (!title) {
-      // TuneIn answers 200 with an empty body for a name it does not know, so an
-      // absent head title is what makes a typo reportable at all (issue #362).
+    const check = await deps.validateTuneInUsername(username);
+    if (!check.found) {
       deps.sendJson(res, 200, {
         valid: false,
         error: 'tunein-username-invalid',
@@ -652,10 +652,7 @@ async function handleTuneInValidate(
       });
       return;
     }
-    // Count what the browser will actually show: presets filed in folders or grouped
-    // into sections are stations too, and used to count as zero.
-    const expanded = await expandPresetOutlines(api, outlines, username);
-    deps.sendJson(res, 200, { valid: true, presetCount: countPlayablePresets(expanded) });
+    deps.sendJson(res, 200, { valid: true, presetCount: check.presetCount });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const isInvalid = /(TuneIn error|HTTP 4\d\d)/i.test(message);

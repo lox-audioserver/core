@@ -5,6 +5,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { test } from './testHarness';
 import { makeOutputDiscoveryFake } from './fakes/outputDiscovery';
 import { makeYtMusicAdminFake } from './fakes/ytMusicAdmin';
+import { makeSoloistAdminFake } from './fakes/soloistAdmin';
 import {
   AdminApiHandler,
   buildSqueezeliteAdminPlayerSnapshot,
@@ -151,6 +152,12 @@ function createHandler(): AdminApiHandler {
   return new AdminApiHandler({
     outputDiscovery: makeOutputDiscoveryFake(),
     ytMusicAdmin: makeYtMusicAdminFake(),
+    soloistAdmin: makeSoloistAdminFake(),
+    appleMusicAdmin: {
+      configuredDeveloperToken: () => null,
+      verifyWidevineArtifacts: async () => ({ ok: false, code: 'missing', details: [] }),
+    },
+    validateTuneInUsername: async () => ({ found: false }),
     zoneManager,
     configPort: noopConfigPort,
     notifier: makeNotifierFake(),

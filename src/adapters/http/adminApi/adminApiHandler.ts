@@ -1,3 +1,6 @@
+import type { AppleMusicAdminPort } from '@/ports/AppleMusicAdminPort';
+import type { TuneInUsernameCheck } from '@/adapters/content/providers/tunein/tuneinAdmin';
+import type { SoloistAdminPort } from '@/ports/SoloistAdminPort';
 import type { YtMusicAdminPort } from '@/ports/YtMusicAdminPort';
 import { providerTitle } from '@/adapters/content/providerRegistry';
 import type { OutputDiscoveryPort } from '@/ports/OutputDiscoveryPort';
@@ -28,6 +31,12 @@ import type { SonnCorePeerRegistry } from '@/adapters/discovery/sonnCorePeerRegi
 import type { MqttPublisher } from '@/adapters/mqtt/mqttPublisher';
 
 export type AdminApiOptions = {
+  /** Apple Music's management operations; see AppleMusicAdminPort. */
+  appleMusicAdmin: AppleMusicAdminPort;
+  /** Whether a TuneIn username resolves; see the TuneIn admin module. */
+  validateTuneInUsername: (username: string) => Promise<TuneInUsernameCheck>;
+  /** Soloist's management operations; see SoloistAdminPort. */
+  soloistAdmin: SoloistAdminPort;
   /** The YouTube stack's management operations; see YtMusicAdminPort. */
   ytMusicAdmin: YtMusicAdminPort;
   /** Finds playback devices on the network; see OutputDiscoveryPort. */
@@ -180,6 +189,9 @@ export class AdminApiHandler {
   private readonly configPort: ConfigPort;
   private readonly outputDiscovery: OutputDiscoveryPort;
   private readonly ytMusicAdmin: YtMusicAdminPort;
+  private readonly soloistAdmin: SoloistAdminPort;
+  private readonly appleMusicAdmin: AppleMusicAdminPort;
+  private readonly validateTuneInUsername: AdminApiOptions['validateTuneInUsername'];
   private readonly spotifyInputService: SpotifyInputService;
   private readonly sendspinLineInService: SendspinLineInService;
   private readonly syncMediaServer?: () => Promise<void>;
@@ -217,6 +229,9 @@ export class AdminApiHandler {
     this.configPort = options.configPort;
     this.outputDiscovery = options.outputDiscovery;
     this.ytMusicAdmin = options.ytMusicAdmin;
+    this.soloistAdmin = options.soloistAdmin;
+    this.appleMusicAdmin = options.appleMusicAdmin;
+    this.validateTuneInUsername = options.validateTuneInUsername;
     this.spotifyInputService = options.spotifyInputService;
     this.sendspinLineInService = options.sendspinLineInService;
     this.syncMediaServer = options.syncMediaServer;
@@ -260,6 +275,7 @@ export class AdminApiHandler {
   private buildRoutes(): Route[] {
     return [
       ...buildAppleMusicRoutes({
+        appleMusicAdmin: this.appleMusicAdmin,
         log: this.log,
         readBinaryBody: (req, res, max) => readBinaryBody(req, res, max),
         sendJson: (res, status, payload) => sendJson(res, status, payload),
@@ -280,6 +296,7 @@ export class AdminApiHandler {
       ...buildSpotifyRoutes({
         log: this.log,
         ytMusicAdmin: this.ytMusicAdmin,
+        soloistAdmin: this.soloistAdmin,
         configPort: this.configPort,
         notifier: this.notifier,
         contentManager: this.contentManager,
@@ -346,6 +363,7 @@ export class AdminApiHandler {
         sendJson: (res, status, payload) => sendJson(res, status, payload),
       }),
       ...buildContentRoutes({
+        validateTuneInUsername: (username) => this.validateTuneInUsername(username),
         log: this.log,
         contentManager: this.contentManager,
         webdav: this.webdav,

@@ -1,23 +1,10 @@
+import type { SoloistAdminPort } from '@/ports/SoloistAdminPort';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { createLogger } from '@/shared/logging/logger';
 import type { ConfigPort } from '@/ports/ConfigPort';
 import type { SpotifyInputService } from '@/adapters/inputs/spotify/spotifyInputService';
-import {
-  probeBinary,
-  soloistBinaryPath,
-} from '@/adapters/inputs/spotify/soloist/soloistProcess';
-import {
-  cancelAccountPairing,
-  pairingSnapshot,
-  startAccountPairing,
-} from '@/adapters/inputs/spotify/soloist/soloistPairing';
-import {
-  extractSoloistFromArchive,
-  looksGzipped,
-} from '@/adapters/inputs/spotify/soloist/soloistArchive';
-import { buildUrlForHost } from '@/adapters/inputs/spotify/soloist/soloistUpdater';
 
 const log = createLogger('Content', 'Soloist');
 
@@ -58,6 +45,14 @@ function readElfArch(buffer: Buffer): { ok: boolean; arch?: string } {
 
 export type SoloistHandlerDeps = {
   configPort: ConfigPort;
+  /**
+   * Soloist's management operations; see SoloistAdminPort.
+   *
+   * Injected rather than imported: these probe a binary on disk, unpack an archive and open a
+   * pairing window that waits on a real Spotify app, so a route that reaches for them directly
+   * cannot be exercised at all.
+   */
+  soloistAdmin: SoloistAdminPort;
   spotifyInputService: SpotifyInputService;
   readBinaryBody: (req: IncomingMessage, res: ServerResponse, maxBytes: number) => Promise<Buffer | null>;
   readJsonBody: (req: IncomingMessage, res: ServerResponse, maxBytes?: number) => Promise<unknown>;
@@ -71,13 +66,13 @@ export async function handleSoloistStatus(
 ): Promise<void> {
   const cfg = deps.configPort.getConfig();
   const settings = cfg.content?.spotify?.soloist ?? {};
-  const binary = await probeBinary();
+  const binary = await deps.soloistAdmin.binaryStatus();
   // Accounts, not rooms. A room signs itself in — it advertises and whoever picks it in their own
   // Spotify app is the one who takes it — but playback this server drives has nobody to ask at the
   // moment a track starts, so each account is signed in once, here.
   const accounts = (await deps.spotifyInputService.soloistAccounts()).map((account) => ({
     ...account,
-    pairing: pairingSnapshot(account.id) ?? { state: 'idle' as const },
+    pairing: deps.soloistAdmin.pairingSnapshot(account.id) ?? { state: 'idle' as const },
   }));
   deps.sendJson(res, 200, {
     ok: true,
@@ -91,7 +86,7 @@ export async function handleSoloistStatus(
     // Where the program comes from now: this server fetches it, so the screen can say when it last
     // looked rather than asking anyone to keep track of a 90-day clock.
     build: settings.build ?? null,
-    autoUpdates: buildUrlForHost() !== null,
+    autoUpdates: deps.soloistAdmin.autoUpdateUrl() !== null,
     hostArch: hostArch(),
     binary,
     accounts,
@@ -168,10 +163,10 @@ export async function handleSoloistBinaryUpload(
   // Spotify hands out a .tar.gz, so take that too rather than making unpacking the user's
   // problem — on Windows especially, it is a step with nothing to do with playing music.
   let program = body;
-  if (looksGzipped(body)) {
+  if (deps.soloistAdmin.looksGzipped(body)) {
     const extracted = (() => {
       try {
-        return extractSoloistFromArchive(body);
+        return deps.soloistAdmin.extractFromArchive(body);
       } catch {
         return null;
       }
@@ -203,7 +198,7 @@ export async function handleSoloistBinaryUpload(
     return;
   }
 
-  const target = soloistBinaryPath();
+  const target = deps.soloistAdmin.binaryPath();
   try {
     await fsp.mkdir(path.dirname(target), { recursive: true });
     await fsp.writeFile(target, program, { mode: 0o700 });
@@ -215,7 +210,7 @@ export async function handleSoloistBinaryUpload(
   }
 
   // Run it once now rather than discovering at play time that it does not work on this host.
-  const binary = await probeBinary();
+  const binary = await deps.soloistAdmin.binaryStatus();
   log.info('soloist binary stored', { version: binary.version, arch: elf.arch });
   await handleSoloistStatus(res, deps);
 }
@@ -237,7 +232,7 @@ export async function handleSoloistPairing(
       deps.sendJson(res, 400, { error: 'missing-account' });
       return;
     }
-    deps.sendJson(res, 200, { ok: true, ...(pairingSnapshot(accountId) ?? { state: 'idle' }) });
+    deps.sendJson(res, 200, { ok: true, ...(deps.soloistAdmin.pairingSnapshot(accountId) ?? { state: 'idle' }) });
     return;
   }
 
@@ -253,7 +248,7 @@ export async function handleSoloistPairing(
     return;
   }
   if (body?.cancel) {
-    cancelAccountPairing(accountId);
+    deps.soloistAdmin.cancelPairing(accountId);
     deps.sendJson(res, 200, { ok: true, state: 'idle' });
     return;
   }
@@ -262,7 +257,7 @@ export async function handleSoloistPairing(
     deps.sendJson(res, 400, { error: 'no-api-key' });
     return;
   }
-  const binary = await probeBinary();
+  const binary = await deps.soloistAdmin.binaryStatus();
   if (!binary.present || !binary.executable) {
     deps.sendJson(res, 400, { error: 'no-binary' });
     return;
@@ -280,7 +275,7 @@ export async function handleSoloistPairing(
   // rather than quietly leaving a store that browses as one person and plays as another.
   const expectedSpotifyId = (cfg.content?.spotify?.accounts ?? [])
     .find((entry) => entry.id === accountId)?.spotifyId?.trim();
-  const state = await startAccountPairing({
+  const state = await deps.soloistAdmin.startPairing({
     accountId,
     apiKey,
     deviceName,
