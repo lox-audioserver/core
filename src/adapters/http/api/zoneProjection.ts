@@ -24,6 +24,7 @@ import type {
   ApiRepeatMode,
   ApiSource,
   ApiSourceKind,
+  ApiZoneSession,
   ApiTrack,
   ApiZoneState,
 } from '@/domain/zones/apiTypes';
@@ -326,6 +327,8 @@ export type ZoneProjectionLookups = {
    * engine session, not the zone — so it is passed in like the device and volume lookups.
    */
   streamFormat?: (zoneId: number) => ApiAudioFormat | null;
+  /** The room's counters for this run of playback; see `ZoneSessionStats`. */
+  session?: (zoneId: number) => ApiZoneSession | null;
   volumeLimits?: ApiVolumeLimits;
 };
 
@@ -359,6 +362,7 @@ export function toApiZoneState(state: ZoneState, lookups: ZoneProjectionLookups 
       lookups.outputSync,
     ),
     format: lookups.streamFormat?.(state.id) ?? null,
+    session: lookups.session?.(state.id) ?? null,
     // Only present when something went wrong, so `if (zone.error)` is the whole check.
     ...(error ? { error } : {}),
   };

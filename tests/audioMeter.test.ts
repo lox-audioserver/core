@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { Jimp } from 'jimp';
 import { test } from './testHarness';
-import { SendspinVisualizer, windowSizeFor } from '../src/adapters/outputs/sendspin/sendspinVisualizer';
+import { AudioMeter, windowSizeFor } from '../src/application/audio/audioMeter';
 import { derivePalette, type Rgb } from '../src/application/artwork/artworkPalette';
 
 const SAMPLE_RATE = 48_000;
@@ -17,7 +17,7 @@ function sineMono16(freqHz: number, amp: number, samples: number): Buffer {
   return buf;
 }
 
-function baseOpts(extra: Partial<ConstructorParameters<typeof SendspinVisualizer>[0]> = {}) {
+function baseOpts(extra: Partial<ConstructorParameters<typeof AudioMeter>[0]> = {}) {
   return {
     sampleRate: SAMPLE_RATE,
     channels: 1,
@@ -37,7 +37,7 @@ test('visualizer: loudness rises with amplitude and is zero on silence', () => {
   const seen: number[] = [];
   const make = (amp: number): number => {
     seen.length = 0;
-    const dsp = new SendspinVisualizer(baseOpts({ emitLoudness: true, onLoudness: (v) => seen.push(v) }));
+    const dsp = new AudioMeter(baseOpts({ emitLoudness: true, onLoudness: (v) => seen.push(v) }));
     dsp.push(sineMono16(1000, amp, WINDOW), 0);
     assert.equal(seen.length, 1, 'one full window emits exactly once');
     return seen[0]!;
@@ -45,7 +45,7 @@ test('visualizer: loudness rises with amplitude and is zero on silence', () => {
 
   const silence = (): number => {
     seen.length = 0;
-    const dsp = new SendspinVisualizer(baseOpts({ emitLoudness: true, onLoudness: (v) => seen.push(v) }));
+    const dsp = new AudioMeter(baseOpts({ emitLoudness: true, onLoudness: (v) => seen.push(v) }));
     dsp.push(Buffer.alloc(WINDOW * 2), 0);
     return seen[0]!;
   };
@@ -69,7 +69,7 @@ test('visualizer: the wire value is a dB position, not an amplitude', () => {
    */
   const levelOf = (amp: number): number => {
     let seen = -1;
-    const dsp = new SendspinVisualizer(baseOpts({ emitLoudness: true, onLoudness: (v) => { seen = v; } }));
+    const dsp = new AudioMeter(baseOpts({ emitLoudness: true, onLoudness: (v) => { seen = v; } }));
     dsp.push(sineMono16(1000, amp, WINDOW), 0);
     return seen;
   };
@@ -98,7 +98,7 @@ test('visualizer: the wire value is a dB position, not an amplitude', () => {
 test('visualizer: f_peak locates the dominant tone', () => {
   for (const freq of [440, 1000, 4000]) {
     let peakHz = -1;
-    const dsp = new SendspinVisualizer(baseOpts({ emitFpeak: true, onFpeak: (hz) => { peakHz = hz; } }));
+    const dsp = new AudioMeter(baseOpts({ emitFpeak: true, onFpeak: (hz) => { peakHz = hz; } }));
     dsp.push(sineMono16(freq, 0.6, WINDOW), 0);
     assert.ok(Math.abs(peakHz - freq) < 25, `f_peak ${peakHz}Hz should be within a bin of ${freq}Hz`);
   }
@@ -111,7 +111,7 @@ test('visualizer: spectrum concentrates energy in the tone band', () => {
   const fMin = 20;
   const fMax = 20_000;
   let bins: Uint16Array | null = null;
-  const dsp = new SendspinVisualizer(baseOpts({
+  const dsp = new AudioMeter(baseOpts({
     spectrum: { n_disp_bins: nBins, scale: 'lin', f_min: fMin, f_max: fMax },
     onSpectrum: (b) => { bins = Uint16Array.from(b); },
   }));
@@ -139,7 +139,7 @@ test('visualizer: every display bin can carry a value, however narrow its band',
    */
   const nBins = 48;
   const held = new Uint16Array(nBins);
-  const dsp = new SendspinVisualizer(baseOpts({
+  const dsp = new AudioMeter(baseOpts({
     spectrum: { n_disp_bins: nBins, scale: 'log', f_min: 40, f_max: 16_000 },
     onSpectrum: (b) => {
       for (let i = 0; i < nBins; i += 1) if (b[i]! > held[i]!) held[i] = b[i]!;
@@ -166,7 +166,7 @@ test('visualizer: a tone lands in the display bin whose band contains it', () =>
   const fMax = 16_000;
   for (const freq of [110, 440, 2000, 8000]) {
     let bins: Uint16Array | null = null;
-    const dsp = new SendspinVisualizer(baseOpts({
+    const dsp = new AudioMeter(baseOpts({
       spectrum: { n_disp_bins: nBins, scale: 'log', f_min: fMin, f_max: fMax },
       onSpectrum: (b) => { bins = Uint16Array.from(b); },
     }));
@@ -204,7 +204,7 @@ test('visualizer: frequency resolution holds at high sample rates', () => {
   const rate = 192_000;
   const window = windowSizeFor(rate);
   let bins: Uint16Array | null = null;
-  const dsp = new SendspinVisualizer({
+  const dsp = new AudioMeter({
     ...baseOpts({
       spectrum: { n_disp_bins: nBins, scale: 'log', f_min: fMin, f_max: fMax },
       onSpectrum: (b) => { bins = Uint16Array.from(b); },
@@ -240,7 +240,7 @@ test('visualizer: level survives channels in opposite phase', () => {
     buf.writeInt16LE(-s, i * 4 + 2);
   }
   let loudness = -1;
-  const dsp = new SendspinVisualizer(baseOpts({
+  const dsp = new AudioMeter(baseOpts({
     channels: 2,
     emitLoudness: true,
     onLoudness: (v) => { loudness = v; },
@@ -256,7 +256,7 @@ test('visualizer: bar fall time follows wall-clock, not the frame rate', () => {
    */
   const decayedAt = (rateMax: number): number => {
     const frames: Uint16Array[] = [];
-    const dsp = new SendspinVisualizer(baseOpts({
+    const dsp = new AudioMeter(baseOpts({
       rateMax,
       spectrum: { n_disp_bins: 16, scale: 'log', f_min: 40, f_max: 16_000 },
       onSpectrum: (b) => frames.push(Uint16Array.from(b)),
@@ -282,7 +282,7 @@ test('visualizer: pitch tracks a tone to the right MIDI note', () => {
   // 220 Hz == A3 == MIDI 57; the wire value is MIDI in 8.8 fixed point.
   let midiQ88 = -1;
   let confidence = -1;
-  const dsp = new SendspinVisualizer(baseOpts({ emitPitch: true, onPitch: (m, c) => { midiQ88 = m; confidence = c; } }));
+  const dsp = new AudioMeter(baseOpts({ emitPitch: true, onPitch: (m, c) => { midiQ88 = m; confidence = c; } }));
   dsp.push(sineMono16(220, 0.6, WINDOW), 0);
   assert.ok(midiQ88 > 0, 'pitch emitted for a voiced tone');
   const midi = midiQ88 / 256;
@@ -292,7 +292,7 @@ test('visualizer: pitch tracks a tone to the right MIDI note', () => {
 
 test('visualizer: pitch is gated out on silence', () => {
   let emitted = false;
-  const dsp = new SendspinVisualizer(baseOpts({ emitPitch: true, onPitch: () => { emitted = true; } }));
+  const dsp = new AudioMeter(baseOpts({ emitPitch: true, onPitch: () => { emitted = true; } }));
   dsp.push(Buffer.alloc(WINDOW * 2), 0);
   assert.equal(emitted, false, 'unvoiced/silent input emits no pitch');
 });
@@ -301,7 +301,7 @@ test('visualizer: pitch is gated out on silence', () => {
 
 test('visualizer: peak fires on a sudden energy jump, not on steady level', () => {
   const peaks: number[] = [];
-  const dsp = new SendspinVisualizer(baseOpts({ rateMax: 30, emitPeak: true, onPeak: (s) => peaks.push(s) }));
+  const dsp = new AudioMeter(baseOpts({ rateMax: 30, emitPeak: true, onPeak: (s) => peaks.push(s) }));
   const interval = Math.floor(1_000_000 / 30);
   // Two steady-quiet windows establish the running mean (no onset)...
   dsp.push(sineMono16(1000, 0.1, WINDOW), 0);
@@ -317,7 +317,7 @@ test('visualizer: peak fires on a sudden energy jump, not on steady level', () =
 
 test('visualizer: emits are paced to rate_max', () => {
   let count = 0;
-  const dsp = new SendspinVisualizer(baseOpts({ rateMax: 30, emitLoudness: true, onLoudness: () => { count += 1; } }));
+  const dsp = new AudioMeter(baseOpts({ rateMax: 30, emitLoudness: true, onLoudness: () => { count += 1; } }));
   const interval = Math.floor(1_000_000 / 30);
   dsp.push(sineMono16(1000, 0.3, WINDOW), 0);
   // Too soon: below the emit interval, must be suppressed.
@@ -330,7 +330,7 @@ test('visualizer: emits are paced to rate_max', () => {
 
 test('visualizer: no emit until a full window is buffered', () => {
   let count = 0;
-  const dsp = new SendspinVisualizer(baseOpts({ emitLoudness: true, onLoudness: () => { count += 1; } }));
+  const dsp = new AudioMeter(baseOpts({ emitLoudness: true, onLoudness: () => { count += 1; } }));
   dsp.push(sineMono16(1000, 0.3, WINDOW - 1), 0);
   assert.equal(count, 0, 'a partial window emits nothing');
   dsp.push(sineMono16(1000, 0.3, 1), 1_000_000);

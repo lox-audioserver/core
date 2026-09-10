@@ -13,7 +13,30 @@ export type AudioAnalysisEvent =
   | { type: 'peak'; strength: number; timestampUs: number }
   | { type: 'pitch'; midiQ88: number; confidence: number; timestampUs: number }
   /** Front left/right levels in the same u16 dB encoding as `loudness`. Mono reports both equal. */
-  | { type: 'stereo'; left: number; right: number; timestampUs: number };
+  | { type: 'stereo'; left: number; right: number; timestampUs: number }
+  /**
+   * The readings below are *not* u16 dB positions — they are the units a person reads.
+   *
+   * The visualizer@v1 encoding exists so a small client can draw bars without doing arithmetic; a
+   * loudness in LUFS or a peak in dBTP is a number to *print*, and re-encoding it into a 16-bit
+   * window would throw away the sign and the precision that make it worth printing.
+   */
+  | { type: 'correlation'; value: number; dcOffset: number; timestampUs: number }
+  /** Inter-sample peak per side in dBTP (−Infinity when silent), and full-scale samples so far. */
+  | { type: 'truepeak'; leftDb: number; rightDb: number; clips: number; timestampUs: number }
+  /** EBU R128, in LUFS and LU. Any field is null until enough audio has passed to state it. */
+  | {
+      type: 'ebu';
+      momentary: number | null;
+      shortTerm: number | null;
+      integrated: number | null;
+      range: number | null;
+      timestampUs: number;
+    }
+  /** A decimated waveform of the analysis window, signed bytes. */
+  | { type: 'scope'; points: Int8Array; timestampUs: number }
+  /** Front-pair sample pairs, interleaved L,R as signed bytes. */
+  | { type: 'gonio'; points: Int8Array; timestampUs: number };
 
 export type AudioAnalysisSubscription = {
   sampleRate: number;
@@ -27,6 +50,11 @@ export type AudioAnalysisSubscription = {
   peak?: boolean;
   pitch?: boolean;
   stereo?: boolean;
+  correlation?: boolean;
+  truePeak?: boolean;
+  ebu?: boolean;
+  scope?: boolean;
+  gonio?: boolean;
   spectrum?: {
     n_disp_bins: number;
     scale: 'lin' | 'log' | 'mel';
@@ -37,7 +65,17 @@ export type AudioAnalysisSubscription = {
 
 export type AudioAnalysisListener = (event: AudioAnalysisEvent) => void;
 
-export type AudioAnalysisAnalyzer = { push: (pcm: Buffer, timestampUs: number) => void };
+export type AudioAnalysisAnalyzer = {
+  push: (pcm: Buffer, timestampUs: number) => void;
+  /**
+   * Start over any measurement that is *running* rather than windowed.
+   *
+   * Optional because most analyzers have none: everything derived from one 43 ms window is already
+   * about whatever is playing now. The loudness integrator and the clip count are the exceptions —
+   * they describe a programme, and a programme ends when the track does.
+   */
+  reset?: () => void;
+};
 export type AudioAnalysisAnalyzerFactory = (
   options: AudioAnalysisSubscription,
   listener: AudioAnalysisListener,
@@ -79,6 +117,23 @@ export class AudioAnalysisService {
    */
   public setFeedController(controller: AudioAnalysisFeedController | null): void {
     this.feedController = controller;
+  }
+
+  /**
+   * Tell a zone's analyzers that a new programme has started.
+   *
+   * Called at a track boundary, which is a thing this service is not otherwise aware of — it sees
+   * PCM and formats. Harmless for an analyzer that keeps no running state, which is why it is a
+   * broadcast rather than something a caller has to hold a handle for.
+   */
+  public reset(zoneId: number): void {
+    const zoneSubscriptions = this.subscriptions.get(zoneId);
+    if (!zoneSubscriptions) {
+      return;
+    }
+    for (const subscription of zoneSubscriptions.values()) {
+      subscription.analyzer.reset?.();
+    }
   }
 
   public subscribe(

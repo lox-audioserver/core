@@ -11,7 +11,7 @@ import { toApiInput } from '@/adapters/http/api/inputProjection';
 import { getZoneEqualizerBands } from '@/domain/zones/equalizer';
 import { resizeCoverUrl, resizeTuneInCoverUrl } from '@/shared/coverArt';
 import type { ApiEventHub } from '@/adapters/http/api/apiEventHub';
-import type { ApiGroupResult, ApiOutput, ApiPlaylist, ApiPowerState, ApiAudioFormat, ApiVolumeLimits } from '@/domain/zones/apiTypes';
+import type { ApiGroupResult, ApiOutput, ApiPlaylist, ApiPowerState, ApiAudioFormat, ApiVolumeLimits, ApiZoneSession } from '@/domain/zones/apiTypes';
 import type { ZoneManagerFacade } from '@/application/zones/createZoneManager';
 import type { AudioAnalysisService } from '@/application/audio/audioAnalysisService';
 import type { AudioAnalysisEvent, AudioAnalysisSubscription } from '@/application/audio/audioAnalysisService';
@@ -131,6 +131,8 @@ export type ApiSurfaceDeps = {
   resolveInputLabel: (inputId: string) => string | null;
   /** What a zone is streaming, for `format`; see toApiAudioFormat. */
   resolveStreamFormat: (zoneId: number) => ApiAudioFormat | null;
+  /** This run of playback's counters, for `session`; see ZoneSessionStats. */
+  resolveZoneSession: (zoneId: number) => ApiZoneSession | null;
   serverVersion: string;
   /** Whether the server is serving yet, for /health and /ready. */
   lifecycle: ServerLifecycle;
@@ -188,6 +190,7 @@ export function createApiHandlerDeps(
       analysisOptions: AudioAnalysisSubscription,
       listener: (event: AudioAnalysisEvent) => void,
     ) => deps.audioAnalysis.subscribe(zoneId, analysisOptions, listener),
+    resetAudioAnalysis: (zoneId: number) => deps.audioAnalysis.reset(zoneId),
     // 'api' as the type, so anything keying on how playback started can tell this
     // apart from a Loxone tap or a favourite.
     // Accepts a browse id as well as a raw audiopath: browse hands out ids, and the guide
@@ -427,6 +430,7 @@ export function createApiHandlerDeps(
     getServiceLabel: (audiopath) => deps.resolveServiceLabel(audiopath),
     getInputLabel: (inputId) => deps.resolveInputLabel(inputId),
     getStreamFormat: (zoneId) => deps.resolveStreamFormat(zoneId),
+    getZoneSession: (zoneId) => deps.resolveZoneSession(zoneId),
     getEqualizerBands: (zoneId) => {
       const zone = deps.configPort.getConfig().zones?.find((z) => z.id === zoneId);
       return zone ? [...getZoneEqualizerBands(zone)] : null;

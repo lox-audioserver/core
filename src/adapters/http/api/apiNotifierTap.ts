@@ -22,6 +22,7 @@ import type {
   ApiPowerState,
   ApiVolumeLimits,
 } from '@/domain/zones/apiTypes';
+import type { ZoneSessionStats } from '@/application/zones/zoneSessionStats';
 import {
   toApiZoneState,
   type OutputDeviceLookup,
@@ -46,6 +47,14 @@ export function withApiEvents(
     streamFormat?: (zoneId: number) => ApiAudioFormat | null;
     volumeLimits?: (zoneId: number) => ApiVolumeLimits | undefined;
     powerState?: (zoneId: number) => ApiPowerState | null;
+    /**
+     * The session counters, observed here rather than in the projection.
+     *
+     * This decorator is the one place that sees *every* zone change; the projection below it runs
+     * only while somebody is subscribed. Counting there would mean a house that nobody was watching
+     * played its tracks uncounted, and the numbers would then depend on who had a browser open.
+     */
+    sessions?: ZoneSessionStats;
   } = {},
 ): NotifierPort {
   /**
@@ -66,6 +75,36 @@ export function withApiEvents(
   return {
     notifyZoneStateChanged: (state) => {
       inner.notifyZoneStateChanged(state);
+      /*
+       * Guarded, like every other thing this decorator does.
+       *
+       * The file's own rule is that the public API must never be able to break the signal it is
+       * tapping — and this block was the one place that ignored it. It runs on the hot path of every
+       * playback transition and calls two lookups into the engine and the output; one throw there and
+       * `notifyZoneStateChanged` fails, which means *starting a track* fails. Counters are the least
+       * important thing on this path and must be the first to give way.
+       */
+      try {
+        if (lookups.sessions) {
+        const format = lookups.streamFormat?.(state.id) ?? null;
+        const output = format?.output ?? null;
+        const syncState = lookups.outputSync?.(state.id)?.state ?? null;
+        lookups.sessions.observe(state.id, {
+          playing: state.mode === 'play',
+          stopped: state.mode === 'stop',
+          // The audiopath *is* the track's identity here — the same string the rest of the server
+          // resolves playback from. Title alone would merge two live-stream tracks with no metadata.
+          trackKey: state.audiopath || state.title || '',
+          formatKey: output
+            ? `${output.codec}/${output.sampleRate}/${output.bitDepth ?? 0}/${output.channels}`
+            : '',
+          bitPerfect: format?.bitPerfect === true,
+          synchronized: syncState === null ? null : syncState === 'synchronized',
+        });
+        }
+      } catch {
+        /* A counter that cannot be kept is a counter that goes unkept. */
+      }
       // The public API must never be able to break Loxone delivery, so failures
       // here are contained rather than propagated to the caller.
       if (hub.subscriberCount > 0) {
@@ -81,6 +120,7 @@ export function withApiEvents(
             streamFormat: lookups.streamFormat,
             volumeLimits: lookups.volumeLimits?.(state.id),
             powerState: lookups.powerState,
+            session: (zoneId) => lookups.sessions?.get(zoneId) ?? null,
           }),
         );
       }

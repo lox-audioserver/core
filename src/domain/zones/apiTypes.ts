@@ -151,6 +151,17 @@ export interface ApiOutput {
  * look like 100 ms of trouble. What tells you it is *healthy* is `leadMinMs` — the floor holding at or above the target; a `driftMs` that
  * keeps growing is a timeline slipping rather than one bad moment.
  */
+/** Counters for one run of playback in a room. See `ApiZoneState.session`. */
+export interface ApiZoneSession {
+  /** Unix milliseconds when this run began. */
+  startedAt: number;
+  tracks: number;
+  /** How many of those reached the output untouched. */
+  bitPerfect: number;
+  formatChanges: number;
+  clockResyncs: number;
+}
+
 export interface ApiOutputSync {
   /**
    * The device's own verdict on its clock. 'unknown' until it has said; 'external_source' means it
@@ -341,6 +352,16 @@ export interface ApiZoneState {
    * device is really receiving.
    */
   format: ApiAudioFormat | null;
+  /**
+   * What this room has been doing since the music started, or null when it is not playing.
+   *
+   * Counters over a *sequence* of states, which is why they are here rather than derivable by a
+   * client: a page that opens mid-evening has not seen the track changes it would have to count.
+   * A run survives a pause and ends at a stop. See `ZoneSessionStats` for what each one counts and,
+   * more to the point, for what is deliberately absent — there is no underrun count, because
+   * nothing in this server measures one.
+   */
+  session?: ApiZoneSession | null;
   /**
    * Why the last thing this zone was asked to play did not play, or absent when nothing
    * went wrong.

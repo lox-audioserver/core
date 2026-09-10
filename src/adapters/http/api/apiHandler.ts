@@ -50,6 +50,7 @@ import type {
   ApiQueue,
   ApiRecents,
   ApiVolumeLimits,
+  ApiZoneSession,
   ApiZoneState,
 } from '@/domain/zones/apiTypes';
 import type { ZoneState } from '@/domain/zones/zoneState';
@@ -164,6 +165,8 @@ export type ApiHandlerDeps = {
   getInputLabel: (inputId: string) => string | null;
   /** What a zone is streaming right now, for `format`. */
   getStreamFormat: (zoneId: number) => ApiAudioFormat | null;
+  /** This run of playback's counters; null when the room is not playing. */
+  getZoneSession?: (zoneId: number) => ApiZoneSession | null;
   /** What a zone's volume will accept: its cap, its power-on level and its step. */
   getVolumeLimits: (zoneId: number) => ApiVolumeLimits | undefined;
   getPowerState?: (zoneId: number) => ApiPowerState | null;
@@ -175,6 +178,13 @@ export type ApiHandlerDeps = {
     options: AudioAnalysisSubscription,
     listener: (event: AudioAnalysisEvent) => void,
   ) => () => void;
+  /**
+   * Start a zone's *running* measurements over — the loudness integrator and the clip count.
+   *
+   * Optional so a host that wires an older analysis service still serves this endpoint; without it
+   * the readings simply describe everything since the stream armed rather than the current track.
+   */
+  resetAudioAnalysis?: (zoneId: number) => void;
   /** Current equalizer bands for a zone, or null when the zone is unknown. */
   getEqualizerBands: (zoneId: number) => number[] | null;
   /**
@@ -261,6 +271,29 @@ export const API_ROOT = '/api/v1';
 function serializeAnalysisEvent(event: AudioAnalysisEvent): Record<string, unknown> {
   if (event.type === 'spectrum') {
     return { type: event.type, bins: Array.from(event.bins), timestampUs: event.timestampUs };
+  }
+  /*
+   * The two pictures travel as base64, where the spectrum travels as numbers.
+   *
+   * Not an inconsistency: a spectrum is 48 readings a frame and each one is a *value* a client may
+   * want to inspect, while a scope trace and a goniometer figure are 160 and 256 bytes of shape.
+   * As a JSON array those two cost about 1.2 kB a frame — 36 kB/s at 30 fps, for a drawing — and
+   * base64 puts them at a third of that with no loss, because a signed byte is exactly what the
+   * measurement produced.
+   */
+  if (event.type === 'scope' || event.type === 'gonio') {
+    const bytes = Buffer.from(event.points.buffer, event.points.byteOffset, event.points.byteLength);
+    return { type: event.type, points: bytes.toString('base64'), timestampUs: event.timestampUs };
+  }
+  if (event.type === 'truepeak') {
+    /* `-Infinity` is what silence measures and is not valid JSON; null is the same statement. */
+    return {
+      type: event.type,
+      leftDb: Number.isFinite(event.leftDb) ? event.leftDb : null,
+      rightDb: Number.isFinite(event.rightDb) ? event.rightDb : null,
+      clips: event.clips,
+      timestampUs: event.timestampUs,
+    };
   }
   return { ...event };
 }
@@ -1781,7 +1814,27 @@ export class ApiHandler {
         .split(',')
         .map((value) => value.trim())
         .filter((value) =>
-          ['loudness', 'spectrum', 'f_peak', 'peak', 'pitch', 'stereo'].includes(value),
+          [
+            'loudness',
+            'spectrum',
+            'f_peak',
+            'peak',
+            'pitch',
+            'stereo',
+            /*
+             * The measured readings, which cost more than the drawn ones.
+             *
+             * Each is opt-in by name for a reason: `ebu` runs two biquads over every sample of every
+             * channel, `truepeak` reconstructs the loudest neighbourhoods at 4×, and `gonio` and
+             * `scope` put bytes on the wire every frame. A client that only wants a spectrum should
+             * not pay for a loudness meter it never draws.
+             */
+            'correlation',
+            'truepeak',
+            'ebu',
+            'scope',
+            'gonio',
+          ].includes(value),
         ),
     );
     const rateMax = Math.max(1, Math.min(60, Number(url.searchParams.get('rate') ?? 20) || 20));
@@ -1835,6 +1888,11 @@ export class ApiHandler {
         peak: requestedTypes.has('peak'),
         pitch: requestedTypes.has('pitch'),
         stereo: requestedTypes.has('stereo'),
+        correlation: requestedTypes.has('correlation'),
+        truePeak: requestedTypes.has('truepeak'),
+        ebu: requestedTypes.has('ebu'),
+        scope: requestedTypes.has('scope'),
+        gonio: requestedTypes.has('gonio'),
         spectrum,
       };
       // Everything a consumer needs to turn these numbers back into dB and Hz. Without it a
@@ -1865,9 +1923,33 @@ export class ApiHandler {
     };
     arm();
 
+    /*
+     * A track boundary resets what is *running*, without re-arming the analyzer.
+     *
+     * The integrated loudness and the clip count describe a programme; carried across a track change
+     * they would describe the album, then the evening. Rebuilding the analyzer would achieve the same
+     * thing and cost more: the filters and the FFT plan are tuned to the format, which has not
+     * changed, and it would blank the spectrum for a window. So the format decides re-arming and the
+     * track decides resetting — two boundaries, two answers.
+     */
+    let programme = '';
     const unsubscribeZone = this.deps.eventHub.subscribe((event) => {
-      if (event.type === 'zone.changed' && event.zone.id === zoneId) {
-        arm();
+      if (event.type !== 'zone.changed' || event.zone.id !== zoneId) {
+        return;
+      }
+      arm();
+      /*
+       * The provider's own id when there is one, and only then the title.
+       *
+       * Both together looked safer and was wrong: a title that arrives a moment after the track does
+       * — which is normal, metadata fills in — changed the key mid-track and reset a loudness
+       * integrator that was two minutes into a record. The id is stable from the first event. A
+       * source with no id is a live stream, where the title changing genuinely *is* the next song.
+       */
+      const next = event.zone.source?.id ?? event.zone.track?.title ?? '';
+      if (next !== programme) {
+        programme = next;
+        this.deps.resetAudioAnalysis?.(zoneId);
       }
     });
     /*
@@ -1945,6 +2027,7 @@ export class ApiHandler {
       serviceLabel: (audiopath) => this.deps.getServiceLabel(audiopath),
       inputLabel: (inputId) => this.deps.getInputLabel(inputId),
       streamFormat: (zoneId) => this.deps.getStreamFormat(zoneId),
+      session: (zoneId) => this.deps.getZoneSession?.(zoneId) ?? null,
       volumeLimits: this.deps.getVolumeLimits(state.id),
       powerState: (zoneId) => this.deps.getPowerState?.(zoneId) ?? null,
     });

@@ -8,6 +8,7 @@ import { toLoxoneAudiopath } from '@/domain/zones/bridgeIdentity';
 import { ServerLifecycle } from '@/domain/server/lifecycle';
 import { MqttPublisher } from '@/adapters/mqtt/mqttPublisher';
 import { toApiZoneState } from '@/adapters/http/api/zoneProjection';
+import { ZoneSessionStats } from '@/application/zones/zoneSessionStats';
 import { MediaServer } from '@/adapters/mediaserver/mediaServer';
 import { SubsonicApi } from '@/adapters/subsonic/subsonicApi';
 import { WebdavServer } from '@/adapters/webdav/webdavServer';
@@ -36,7 +37,7 @@ import { AudioAnalysisService } from '@/application/audio/audioAnalysisService';
 import { EngineAnalysisFeed } from '@/application/audio/analysisFeed';
 import { zoneSessionKey } from '@/ports/types/SessionKey';
 import { WaveformService } from '@/application/audio/waveformService';
-import { SendspinVisualizer } from '@/adapters/outputs/sendspin/sendspinVisualizer';
+import { AudioMeter } from '@/application/audio/audioMeter';
 import type { ApiOutputCapabilities } from '@/domain/zones/apiTypes';
 import { createZoneManager, type ZoneManagerFacade } from '@/application/zones/createZoneManager';
 import { resolveZoneOutputProtocol } from '@/application/zones/outputProtocol';
@@ -158,6 +159,12 @@ export function createRuntime(): Runtime {
   });
 
   const apiEventHub = new ApiEventHub();
+  /*
+   * The per-room session counters, built here because two paths need the same instance: the notifier
+   * tap feeds it every zone change, and the request path reads it so a GET and an event agree about
+   * what the room has been doing.
+   */
+  const zoneSessions = new ZoneSessionStats();
   const ports = createRuntimePorts({
     // Two taps on the one zone-change signal: the public API's event stream, and the
     // per-zone DLNA renderers. Neither is a second source of truth — both project the
@@ -178,6 +185,7 @@ export function createRuntime(): Runtime {
         streamFormat: resolveStreamFormat,
         volumeLimits: resolveVolumeLimits,
         powerState: resolvePowerState,
+        sessions: zoneSessions,
       }),
       () => dlnaInputService,
     ),
@@ -186,7 +194,7 @@ export function createRuntime(): Runtime {
   // Drive the per-session crossfade pipeline-shape from the system-wide
   // `audioserver.crossfadeSec` config: when crossfade is off (0 or empty) the
   // engine starts a single ffmpeg per file/URL zone instead of decoder+encoder.
-  const audioAnalysis = new AudioAnalysisService((options, listener) => new SendspinVisualizer({
+  const audioAnalysis = new AudioAnalysisService((options, listener) => new AudioMeter({
     sampleRate: options.sampleRate,
     channels: options.channels,
     bitDepth: options.bitDepth,
@@ -196,6 +204,11 @@ export function createRuntime(): Runtime {
     emitPeak: options.peak === true,
     emitPitch: options.pitch === true,
     emitStereo: options.stereo === true,
+    emitCorrelation: options.correlation === true,
+    emitTruePeak: options.truePeak === true,
+    emitEbu: options.ebu === true,
+    emitScope: options.scope === true,
+    emitGonio: options.gonio === true,
     spectrum: options.spectrum,
     onLoudness: (value, timestampUs) => listener({ type: 'loudness', value, timestampUs }),
     onStereo: (left, right, timestampUs) => listener({ type: 'stereo', left, right, timestampUs }),
@@ -205,6 +218,13 @@ export function createRuntime(): Runtime {
     onPeak: (strength, timestampUs) => listener({ type: 'peak', strength, timestampUs }),
     onPitch: (midiQ88, confidence, timestampUs) =>
       listener({ type: 'pitch', midiQ88, confidence, timestampUs }),
+    onCorrelation: (value, dcOffset, timestampUs) =>
+      listener({ type: 'correlation', value, dcOffset, timestampUs }),
+    onTruePeak: (leftDb, rightDb, clips, timestampUs) =>
+      listener({ type: 'truepeak', leftDb, rightDb, clips, timestampUs }),
+    onEbu: (loudness, timestampUs) => listener({ type: 'ebu', ...loudness, timestampUs }),
+    onScope: (points, timestampUs) => listener({ type: 'scope', points, timestampUs }),
+    onGonio: (points, timestampUs) => listener({ type: 'gonio', points, timestampUs }),
   }));
   const audioStreamEngine = new AudioStreamEngine(
     () => (configPort.getSystemConfig()?.audioserver?.crossfadeSec ?? 0) > 0,
@@ -746,6 +766,7 @@ export function createRuntime(): Runtime {
       resolvePowerState,
       resolveInputLabel,
       resolveStreamFormat,
+      resolveZoneSession: (zoneId: number) => zoneSessions.get(zoneId),
       serverVersion: readBuildVersion(),
       lifecycle,
       browserZoneRegistry,
