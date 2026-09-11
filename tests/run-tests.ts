@@ -103,6 +103,7 @@ import './zonePlayerEndGuard.test';
 import './zonePlayerPreDelayClock.test';
 import './durationRegression.test';
 import './sourceDurationLearned.test';
+import './radioBrowserSearch.test';
 import './runtimeShutdown.test';
 import './sourceResolver.test';
 import './beolinkStateController.test';

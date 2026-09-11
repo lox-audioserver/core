@@ -2,6 +2,7 @@ import type { AppleMusicAdminPort } from '@/ports/AppleMusicAdminPort';
 import type { TuneInUsernameCheck } from '@/adapters/content/providers/tunein/tuneinAdmin';
 import type { SoloistAdminPort } from '@/ports/SoloistAdminPort';
 import type { YtMusicAdminPort } from '@/ports/YtMusicAdminPort';
+import type { RadioAdminPort } from '@/ports/RadioAdminPort';
 import { providerTitle } from '@/adapters/content/providerRegistry';
 import type { OutputDiscoveryPort } from '@/ports/OutputDiscoveryPort';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -39,6 +40,8 @@ export type AdminApiOptions = {
   soloistAdmin: SoloistAdminPort;
   /** The YouTube stack's management operations; see YtMusicAdminPort. */
   ytMusicAdmin: YtMusicAdminPort;
+  /** Finding a radio station, and hearing one; see RadioAdminPort. */
+  radioAdmin: RadioAdminPort;
   /** Finds playback devices on the network; see OutputDiscoveryPort. */
   outputDiscovery: OutputDiscoveryPort;
   onReinitialize?: () => Promise<boolean>;
@@ -189,6 +192,7 @@ export class AdminApiHandler {
   private readonly configPort: ConfigPort;
   private readonly outputDiscovery: OutputDiscoveryPort;
   private readonly ytMusicAdmin: YtMusicAdminPort;
+  private readonly radioAdmin: RadioAdminPort;
   private readonly soloistAdmin: SoloistAdminPort;
   private readonly appleMusicAdmin: AppleMusicAdminPort;
   private readonly validateTuneInUsername: AdminApiOptions['validateTuneInUsername'];
@@ -232,6 +236,7 @@ export class AdminApiHandler {
     this.soloistAdmin = options.soloistAdmin;
     this.appleMusicAdmin = options.appleMusicAdmin;
     this.validateTuneInUsername = options.validateTuneInUsername;
+    this.radioAdmin = options.radioAdmin;
     this.spotifyInputService = options.spotifyInputService;
     this.sendspinLineInService = options.sendspinLineInService;
     this.syncMediaServer = options.syncMediaServer;
@@ -364,6 +369,7 @@ export class AdminApiHandler {
       }),
       ...buildContentRoutes({
         validateTuneInUsername: (username) => this.validateTuneInUsername(username),
+        radioAdmin: this.radioAdmin,
         log: this.log,
         contentManager: this.contentManager,
         webdav: this.webdav,

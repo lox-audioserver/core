@@ -30,6 +30,7 @@ import { ytMusicAdmin } from '@/adapters/content/providers/ytmusic/ytmusicAdmin'
 import { soloistAdmin } from '@/adapters/inputs/spotify/soloist/soloistAdmin';
 import { appleMusicAdmin } from '@/adapters/content/providers/applemusic/appleMusicAdmin';
 import { validateTuneInUsername } from '@/adapters/content/providers/tunein/tuneinAdmin';
+import { radioAdmin } from '@/adapters/content/providers/radiobrowser/radioAdmin';
 import type { OutputPorts } from '@/adapters/outputs/outputPorts';
 import { EngineAdapter } from '@/adapters/engine/EngineAdapter';
 import { AudioStreamEngine } from '@/engine/audioStreamEngine';
@@ -716,6 +717,7 @@ export function createRuntime(): Runtime {
       soloistAdmin,
       appleMusicAdmin,
       validateTuneInUsername,
+      radioAdmin,
       onReinitialize: handleReinitialize,
       onSoftRestart: handleSoftRestart,
       onLoxoneToggle: (enabled) => (enabled ? enableLoxone() : disableLoxone()),

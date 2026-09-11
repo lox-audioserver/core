@@ -6,6 +6,7 @@ import { test } from './testHarness';
 import { makeOutputDiscoveryFake } from './fakes/outputDiscovery';
 import { makeYtMusicAdminFake } from './fakes/ytMusicAdmin';
 import { makeSoloistAdminFake } from './fakes/soloistAdmin';
+import { makeRadioAdminFake } from './fakes/radioAdmin';
 import {
   AdminApiHandler,
   buildSqueezeliteAdminPlayerSnapshot,
@@ -158,6 +159,7 @@ function createHandler(): AdminApiHandler {
       verifyWidevineArtifacts: async () => ({ ok: false, code: 'missing', details: [] }),
     },
     validateTuneInUsername: async () => ({ found: false }),
+    radioAdmin: makeRadioAdminFake(),
     zoneManager,
     configPort: noopConfigPort,
     notifier: makeNotifierFake(),

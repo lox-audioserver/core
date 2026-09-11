@@ -1,4 +1,5 @@
 import type { TuneInUsernameCheck } from '@/adapters/content/providers/tunein/tuneinAdmin';
+import type { RadioAdminPort } from '@/ports/RadioAdminPort';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { ComponentLogger } from '@/shared/logging/logger';
 import { bestEffort } from '@/shared/bestEffort';
@@ -18,6 +19,8 @@ export type ContentHandlerDeps = {
    * stops this route from constructing a TuneIn client and reaching for its preset helpers.
    */
   validateTuneInUsername: (username: string) => Promise<TuneInUsernameCheck>;
+  /** Finding a station in the public index, and hearing one; see RadioAdminPort. */
+  radioAdmin: RadioAdminPort;
   contentManager: ContentManager;
   customRadioStore: CustomRadioStore;
   loxoneNotifier: LoxoneWsNotifier;
@@ -123,6 +126,16 @@ export function buildContentRoutes(deps: ContentHandlerDeps): Route[] {
       method: 'POST',
       pattern: /^\/content\/radio\/tunein\/validate$/,
       handler: async (req, res) => handleTuneInValidate(req, res, deps),
+    },
+    {
+      method: 'GET',
+      pattern: /^\/content\/radio\/search$/,
+      handler: async (req, res) => handleRadioSearch(req, res, deps),
+    },
+    {
+      method: 'GET',
+      pattern: /^\/content\/radio\/preview$/,
+      handler: async (req, res) => handleRadioPreview(req, res, deps),
     },
     {
       method: 'DELETE',
@@ -588,7 +601,12 @@ async function handleCustomRadioAdd(
   deps: ContentHandlerDeps,
 ): Promise<void> {
   const body = (await deps.readJsonBody(req, res)) as
-    | { name?: string; stream?: string; coverurl?: string }
+    | {
+        name?: string;
+        stream?: string;
+        coverurl?: string;
+        source?: { provider?: string; stationId?: string };
+      }
     | null;
   if (res.writableEnded) {
     return;
@@ -597,17 +615,113 @@ async function handleCustomRadioAdd(
     deps.sendJson(res, 400, { error: 'invalid-radio-payload' });
     return;
   }
+  // A hand-typed station has no origin, and a claimed one that names an index we do not
+  // know is not recorded as if we had checked it.
+  const stationId = body.source?.stationId?.trim();
+  const origin =
+    body.source?.provider === 'radiobrowser' && stationId
+      ? ({ provider: 'radiobrowser', stationId } as const)
+      : undefined;
   try {
     const station = await deps.customRadioStore.add({
       name: body.name.trim(),
       stream: body.stream.trim(),
       coverurl: body.coverurl?.trim() || undefined,
+      ...(origin ? { source: origin } : {}),
     });
+    if (origin) {
+      // Best-effort by construction: whether the index heard us changes nothing for the
+      // person who just added a station, so it must not delay or fail the response.
+      void bestEffort(() => deps.radioAdmin.reportStationPicked(origin.stationId), {
+        fallback: undefined,
+        onError: 'debug',
+        log: deps.log,
+        label: 'reporting a picked station to the radio index',
+        context: { stationId: origin.stationId },
+      });
+    }
     deps.sendJson(res, 201, { station });
   } catch (err) {
     deps.log.warn('custom radio add failed', { err });
     deps.sendJson(res, 500, { error: 'custom-radio-add-failed' });
   }
+}
+
+/**
+ * Find a station by name in the public radio index.
+ *
+ * The answer fills the same form a URL is typed into — the point is that not knowing a
+ * stream url should not be what stops someone adding a station.
+ */
+async function handleRadioSearch(
+  req: IncomingMessage,
+  res: ServerResponse,
+  deps: ContentHandlerDeps,
+): Promise<void> {
+  const params = new URL(req.url ?? '/', 'http://localhost').searchParams;
+  const query = (params.get('q') ?? '').trim();
+  if (!query) {
+    deps.sendJson(res, 400, { error: 'missing-query' });
+    return;
+  }
+  const requestedLimit = Number.parseInt(params.get('limit') ?? '', 10);
+  try {
+    const stations = await deps.radioAdmin.searchStations(
+      query,
+      Number.isFinite(requestedLimit) ? requestedLimit : undefined,
+    );
+    deps.sendJson(res, 200, { stations });
+  } catch (err) {
+    // The index is somebody else's server: unreachable is an ordinary outcome, and the
+    // form has to be able to say so rather than look broken.
+    deps.log.info('radio index search failed', { err, query });
+    deps.sendJson(res, 502, { error: 'radio-search-failed' });
+  }
+}
+
+/**
+ * Play a stream url to the admin browser so it can be heard before it is saved.
+ *
+ * Streams mp3 for as long as the browser keeps the request open; closing the player, or
+ * asking for the next station, ends it here.
+ */
+async function handleRadioPreview(
+  req: IncomingMessage,
+  res: ServerResponse,
+  deps: ContentHandlerDeps,
+): Promise<void> {
+  const requested = (
+    new URL(req.url ?? '/', 'http://localhost').searchParams.get('url') ?? ''
+  ).trim();
+  if (!/^https?:\/\//i.test(requested)) {
+    deps.sendJson(res, 400, { error: 'invalid-stream-url' });
+    return;
+  }
+  let preview;
+  try {
+    preview = await deps.radioAdmin.openPreview(requested);
+  } catch (err) {
+    deps.log.warn('stream preview failed to start', { err, url: requested });
+    deps.sendJson(res, 500, { error: 'preview-failed' });
+    return;
+  }
+  if (!preview.ok) {
+    deps.sendJson(res, 502, { error: preview.error, detail: preview.detail });
+    return;
+  }
+  if (res.writableEnded || res.destroyed) {
+    // The browser gave up while ffmpeg was still opening the stream.
+    preview.stop('client left before playback started');
+    return;
+  }
+  res.writeHead(200, {
+    'Content-Type': 'audio/mpeg',
+    'Cache-Control': 'no-store',
+    // There is no end to seek to; saying so keeps the player from asking for ranges.
+    'Accept-Ranges': 'none',
+  });
+  res.on('close', () => preview.stop('client disconnected'));
+  preview.body.pipe(res);
 }
 
 async function handleCustomRadioDelete(

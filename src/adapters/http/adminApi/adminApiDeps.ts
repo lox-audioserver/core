@@ -2,6 +2,7 @@ import type { AppleMusicAdminPort } from '@/ports/AppleMusicAdminPort';
 import type { TuneInUsernameCheck } from '@/adapters/content/providers/tunein/tuneinAdmin';
 import type { SoloistAdminPort } from '@/ports/SoloistAdminPort';
 import type { YtMusicAdminPort } from '@/ports/YtMusicAdminPort';
+import type { RadioAdminPort } from '@/ports/RadioAdminPort';
 import type { OutputDiscoveryPort } from '@/ports/OutputDiscoveryPort';
 import type { AdminApiOptions } from '@/adapters/http/adminApi/adminApiHandler';
 import { SonnClientApiHandler } from '@/adapters/http/sonnClientApi/sonnClientApiHandler';
@@ -42,6 +43,8 @@ export type AdminSurfaceDeps = {
   appleMusicAdmin: AppleMusicAdminPort;
   /** Whether a TuneIn username resolves; see the TuneIn admin module. */
   validateTuneInUsername: (username: string) => Promise<TuneInUsernameCheck>;
+  /** Finding a radio station, and hearing one; see RadioAdminPort. */
+  radioAdmin: RadioAdminPort;
   /** Soloist's management operations; see SoloistAdminPort. */
   soloistAdmin: SoloistAdminPort;
   /** The YouTube stack's management operations; see YtMusicAdminPort. */
@@ -90,6 +93,7 @@ export function createAdminApiDeps(
   return {
     appleMusicAdmin: deps.appleMusicAdmin,
     validateTuneInUsername: deps.validateTuneInUsername,
+    radioAdmin: deps.radioAdmin,
     soloistAdmin: deps.soloistAdmin,
     ytMusicAdmin: deps.ytMusicAdmin,
     outputDiscovery: deps.outputDiscovery,

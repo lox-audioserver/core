@@ -11,6 +11,15 @@ export interface CustomRadioEntry {
   name: string;
   stream: string;
   coverurl?: string;
+  /**
+   * Where the entry came from, when it was picked out of an index rather than typed.
+   *
+   * The stream url alone makes a saved station anonymous forever: nothing can say later
+   * whether it moved, and nothing can look it up again. The id of the record it was copied
+   * from is the one thing that cannot be reconstructed afterwards, so it is kept even though
+   * nothing reads it yet.
+   */
+  source?: { provider: 'radiobrowser'; stationId: string };
 }
 
 /**
