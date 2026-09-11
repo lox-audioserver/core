@@ -44,6 +44,21 @@ export interface SonosOutputConfig {
   deviceName?: string;
 }
 
+/**
+ * What a Sonos zone actually needs answered.
+ *
+ * Which speaker this room is, and how good it should sound. Everything else is
+ * plumbing for a network that misbehaves, and stays folded away: Music Assistant
+ * asks a Sonos household for one thing (a manual address, marked advanced) and
+ * finds the rest itself.
+ *
+ * Two fields that used to live here are gone. `controlUrl` was the escape hatch
+ * for a speaker whose endpoints we could not resolve, which is no longer a state
+ * a reachable speaker can be in (#374); a value already in config.json is still
+ * honoured, it is simply not offered any more. `autoDiscover` only ever applied
+ * when no address was given — and having chosen a Sonos output and named no
+ * speaker, searching for one is the only thing left to do.
+ */
 export const SONOS_OUTPUT_DEFINITION: OutputConfigDefinition = {
   id: 'sonos',
   label: 'Sonos',
@@ -55,47 +70,7 @@ export const SONOS_OUTPUT_DEFINITION: OutputConfigDefinition = {
       type: 'text',
       placeholder: '192.168.1.60',
       description:
-        'Optional IP/hostname of the Sonos player. When provided, AVTransport endpoints are discovered automatically.',
-    },
-    {
-      id: 'controlUrl',
-      label: 'AVTransport control URL',
-      type: 'text',
-      placeholder: 'http://192.168.1.60:1400/MediaRenderer/AVTransport/Control',
-      description:
-        'Optional manual AVTransport endpoint. Use this only when discovery is not working.',
-    },
-    {
-      id: 'autoDiscover',
-      label: 'Auto discover',
-      type: 'text',
-      placeholder: 'true',
-      description:
-        "When host isn't set, discover a Sonos device via SSDP (true/false). Defaults to true.",
-    },
-    {
-      id: 'deviceName',
-      label: 'Preferred device name',
-      type: 'text',
-      placeholder: 'Living Room',
-      description:
-        "Used to match a discovered Sonos by name/room. If omitted, the zone name is used.",
-    },
-    {
-      id: 'householdId',
-      label: 'Household ID',
-      type: 'text',
-      placeholder: 'Sonos household id',
-      description:
-        'Optional filter for discovery (HouseholdControlID) when multiple Sonos households are present.',
-    },
-    {
-      id: 'networkScan',
-      label: 'Network scan fallback',
-      type: 'text',
-      placeholder: 'false',
-      description:
-        'When SSDP discovery returns no devices, allow scanning the local subnet for Sonos status pages (true/false).',
+        'The speaker this zone plays on. Picking one from the list below fills this in; type an address yourself if the speaker is not listed.',
     },
     {
       id: 'streamFormat',
@@ -104,6 +79,32 @@ export const SONOS_OUTPUT_DEFINITION: OutputConfigDefinition = {
       placeholder: 'auto',
       description:
         "Sonos players can play FLAC. Set this to 'lossless' to send the music unchanged instead of converting it to MP3; leave it on 'auto' if radio streams or this speaker misbehave.",
+    },
+    {
+      id: 'deviceName',
+      label: 'Preferred device name',
+      type: 'text',
+      placeholder: 'Living Room',
+      advanced: true,
+      description:
+        'Matches a speaker by its Sonos room name when no address is set. Without it, the zone name is used.',
+    },
+    {
+      id: 'householdId',
+      label: 'Household ID',
+      type: 'text',
+      placeholder: 'Sonos household id',
+      advanced: true,
+      description:
+        'Only needed with more than one Sonos household on the network: restricts the search to this one.',
+    },
+    {
+      id: 'networkScan',
+      label: 'Network scan fallback',
+      type: 'boolean',
+      advanced: true,
+      description:
+        'If no speaker answers the search, look for Sonos players by trying every address on the local network. Slower, and only useful where the search is blocked.',
     },
   ],
 };

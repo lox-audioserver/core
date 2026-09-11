@@ -163,12 +163,13 @@ export const SENDSPIN_OUTPUT_DEFINITION: OutputConfigDefinition = {
       type: 'text',
       placeholder: 'ws://esphome.local:8928/sendspin',
       required: false,
+      advanced: true,
       description: 'Optional direct websocket endpoint from discovery; keeps clientId for identity.',
     },
     {
       id: 'latencyMs',
       label: 'Speaker delay (ms)',
-      type: 'text',
+      type: 'number',
       placeholder: '0',
       // Not "sound is later". The client subtracts this from each timestamp, so it plays *earlier*
       // by this much — it exists to cancel delay that happens after its audio port. Raise it for a
@@ -182,6 +183,7 @@ export const SENDSPIN_OUTPUT_DEFINITION: OutputConfigDefinition = {
       label: 'Satellite client IDs',
       type: 'text',
       required: false,
+      advanced: true,
       placeholder: 'subwoofer-wohnzimmer, ledfx-wohnzimmer',
       description:
         'Optional listen-only clients fed the same audio, time-synced (e.g. a subwoofer or visualizer). Comma-separated; per-satellite latency requires manual config.',

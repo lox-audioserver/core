@@ -44,8 +44,9 @@ export const AIRPLAY_OUTPUT_DEFINITION: OutputConfigDefinition = {
     {
       id: 'port',
       label: 'AirPlay port',
-      type: 'text',
+      type: 'number',
       placeholder: '5000',
+      advanced: true,
       description: 'Optional RTSP port override; when omitted, discovery picks it (RAOP is typically 5000).',
     },
     {
@@ -53,6 +54,7 @@ export const AIRPLAY_OUTPUT_DEFINITION: OutputConfigDefinition = {
       label: 'Display name',
       type: 'text',
       placeholder: 'Living Room',
+      advanced: true,
       description: 'Optional name shown in logs.',
     },
     {
@@ -60,22 +62,24 @@ export const AIRPLAY_OUTPUT_DEFINITION: OutputConfigDefinition = {
       label: 'Password',
       type: 'text',
       placeholder: 'Optional password',
+      advanced: true,
       description: 'Only needed for protected AirPlay devices.',
     },
     {
       id: 'bufferMs',
       label: 'Buffer (ms)',
-      type: 'text',
+      type: 'number',
       placeholder: '750',
+      advanced: true,
       description:
         'Device read-ahead buffer in ms (default 750). Raise (e.g. 1500) for devices that stutter or underrun; higher = more resilient but slower start/skip. Range 250–5000.',
     },
     {
       id: 'debug',
       label: 'Debug logging',
-      type: 'text',
-      placeholder: 'true',
-      description: 'Enable verbose AirPlay debug logs (true/false).',
+      type: 'boolean',
+      advanced: true,
+      description: 'Writes every step of the AirPlay conversation to the log. For diagnosing a device that will not play.',
     },
   ],
 };

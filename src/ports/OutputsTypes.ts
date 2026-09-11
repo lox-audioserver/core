@@ -199,10 +199,24 @@ export type ZoneTransport = ZoneOutput;
 export interface OutputFieldDefinition {
   id: string;
   label: string;
-  type: 'text';
+  /**
+   * What the value is, so the admin surface can offer the right control.
+   *
+   * Everything used to be `text`, which is how a yes/no setting ended up as a box
+   * you type the word `true` into. The stored value stays a string either way —
+   * every output parses its own config defensively — so a definition can change
+   * type without invalidating what is already in config.json.
+   */
+  type: 'text' | 'boolean' | 'number';
   placeholder?: string;
   description?: string;
   required?: boolean;
+  /**
+   * Plumbing: correct to expose, wrong to put in front of someone setting up a
+   * room. The admin surface keeps these folded away until asked for. Music
+   * Assistant marks the same class of setting `advanced`.
+   */
+  advanced?: boolean;
 }
 
 export type TransportFieldDefinition = OutputFieldDefinition;

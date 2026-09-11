@@ -41,14 +41,16 @@ export const SQUEEZELITE_OUTPUT_DEFINITION: OutputConfigDefinition = {
       label: 'Player name',
       type: 'text',
       placeholder: 'Living Room',
+      advanced: true,
       description: 'Optional player name when no MAC is configured.',
     },
     {
       id: 'latencyMs',
       label: 'Latency (ms)',
-      type: 'text',
+      type: 'number',
       placeholder: '0',
-      description: 'Optional fixed output latency for sync-groups. Higher = sound is later.',
+      advanced: true,
+      description: 'Fixed output delay for sync groups. Higher = this room plays later.',
     },
   ],
 };

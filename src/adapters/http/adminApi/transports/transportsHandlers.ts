@@ -127,6 +127,7 @@ function handleTransportDefinitions(res: ServerResponse, deps: TransportsHandler
       placeholder: field.placeholder ?? '',
       description: field.description ?? '',
       required: field.required ?? false,
+      advanced: field.advanced ?? false,
     })),
   }));
   deps.sendJson(res, 200, { transports: payload, stateControllers: deps.stateControllerDefinitions });

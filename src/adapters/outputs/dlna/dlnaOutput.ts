@@ -70,31 +70,25 @@ export const DLNA_OUTPUT_DEFINITION: OutputConfigDefinition = {
       type: 'text',
       placeholder: '192.168.1.50',
       description:
-        'Optional IP or hostname of the DLNA renderer. When provided, the control URLs are auto-discovered via SSDP.',
+        'The renderer this zone plays on. Picking one from the list below fills this in; type an address yourself if it is not listed.',
     },
     {
       id: 'controlUrl',
       label: 'AVTransport control URL',
       type: 'text',
       placeholder: 'http://192.168.1.50:12345/Control/AVTransport',
+      advanced: true,
       description:
-        'Optional manual AVTransport endpoint. Use this only when discovery is not working yet.',
-    },
-    {
-      id: 'autoDiscover',
-      label: 'Auto discover',
-      type: 'text',
-      placeholder: 'true',
-      description:
-        "When host isn't set, discover a DLNA renderer via SSDP (true/false). Defaults to true.",
+        'Names the renderer\'s control endpoint by hand. Unlike Sonos, a DLNA renderer can serve its description anywhere, so an address alone is not always enough to find it.',
     },
     {
       id: 'deviceName',
       label: 'Preferred device name',
       type: 'text',
       placeholder: 'Living Room',
+      advanced: true,
       description:
-        'Used to match a discovered renderer by its friendly name. If omitted, the zone name is used.',
+        'Matches a renderer by its own name when no address is set. Without it, the zone name is used.',
     },
     {
       id: 'streamFormat',

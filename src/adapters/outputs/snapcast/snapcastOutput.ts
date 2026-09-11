@@ -30,9 +30,10 @@ export const SNAPCAST_OUTPUT_DEFINITION: OutputConfigDefinition = {
     {
       id: 'latencyMs',
       label: 'Latency (ms)',
-      type: 'text',
+      type: 'number',
       placeholder: '0',
-      description: 'Optional snapclient latency override applied to the configured client IDs.',
+      advanced: true,
+      description: 'Overrides the delay snapclient applies on the configured clients.',
     },
   ],
 };
