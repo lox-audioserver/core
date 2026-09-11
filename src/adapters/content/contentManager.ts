@@ -30,6 +30,7 @@ import {
 import type { NotifierPort } from '@/ports/NotifierPort';
 import { TuneInProvider, type TuneInProviderOptions } from '@/adapters/content/providers/tunein/tuneinProvider';
 import { RadioParadiseProvider } from '@/adapters/content/providers/radioparadise/radioParadiseProvider';
+import { SomaFmProvider } from '@/adapters/content/providers/somafm/somaFmProvider';
 import {
   SpotifyServiceManager,
   SpotifyServiceManagerProvider,
@@ -112,6 +113,7 @@ export class ContentManager {
 
   private tunein: TuneInProvider;
   private radioParadise: RadioParadiseProvider;
+  private somaFm: SomaFmProvider;
   private readonly cache = new ContentCacheManager();
   private readonly globalSearchCache = new Map<
     string,
@@ -158,6 +160,7 @@ export class ContentManager {
     this.customRadioStore = customRadioStore;
     this.tunein = new TuneInProvider(this.customRadioStore, this.readTuneInConfig());
     this.radioParadise = new RadioParadiseProvider({ iconBaseUrl: this.readLocalIconBaseUrl() });
+    this.somaFm = new SomaFmProvider();
   }
 
   public setNotifier(notifier: NotifierPort): void {
@@ -200,6 +203,7 @@ export class ContentManager {
     this.spotify = this.spotifyManagerProvider.reload();
     this.tunein = new TuneInProvider(this.customRadioStore, this.readTuneInConfig());
     this.radioParadise = new RadioParadiseProvider({ iconBaseUrl: this.readLocalIconBaseUrl() });
+    this.somaFm = new SomaFmProvider();
   }
 
   /**
@@ -282,10 +286,17 @@ export class ContentManager {
     return this.configPort.getConfig().content?.radio?.radioParadise?.enabled !== false;
   }
 
+  /** SomaFM is available only once it is switched on; see {@link RadioContentConfig}. */
+  private isSomaFmEnabled(): boolean {
+    return this.configPort.getConfig().content?.radio?.somaFm?.enabled === true;
+  }
+
   public async getRadios(): Promise<RadioMenuEntry[]> {
     // Radio Paradise now lives under the built-in Loxone Radio tile (the
-    // `loxoneradio` service folder), so it is intentionally absent here.
-    return this.tunein.getMenuEntries();
+    // `loxoneradio` service folder), so it is intentionally absent here. SomaFM has no
+    // such tile to live under, so it is listed here and reached by its own name.
+    const entries = await this.tunein.getMenuEntries();
+    return this.isSomaFmEnabled() ? [...entries, this.somaFm.getMenuEntry()] : entries;
   }
 
   /** Public browse tree for the built-in Radio service. */
@@ -319,6 +330,9 @@ export class ContentManager {
       return this.isRadioParadiseEnabled()
         ? this.radioParadise.getFolder('start', offset, limit)
         : null;
+    }
+    if (folderId === 'somafm') {
+      return this.isSomaFmEnabled() ? this.somaFm.getFolder('start', offset, limit) : null;
     }
     if (folderId === 'tunein') {
       return this.tunein.getFolder('local', 'start', offset, limit);
@@ -474,6 +488,10 @@ export class ContentManager {
       folder = this.isRadioParadiseEnabled()
         ? await this.radioParadise.getFolder(folderId, offset, limit)
         : emptyFolder(folderId, 'Radio Paradise', offset, 'radioparadise');
+    } else if (service.toLowerCase() === 'somafm') {
+      folder = this.isSomaFmEnabled()
+        ? await this.somaFm.getFolder(folderId === 'root' ? 'start' : folderId, offset, limit)
+        : emptyFolder(folderId, 'SomaFM', offset, 'somafm');
     } else if (service.toLowerCase() === 'loxoneradio') {
       // The V17 client ships a built-in Loxone Radio tile and browses it via
       // getservicefolder/loxoneradio. Loxone's own streams are gated behind an mTLS

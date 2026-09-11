@@ -276,6 +276,12 @@ export interface RadioContentConfig {
    * our own consumers (player/DLNA) and the native Loxone Radio tile alike.
    */
   radioParadise?: { enabled?: boolean };
+  /**
+   * SomaFM as a toggleable provider. Off unless switched on, unlike Radio Paradise:
+   * that one predates the toggle and is already in people's radio menu, while adding
+   * forty-six channels to everybody's on an upgrade is not ours to decide.
+   */
+  somaFm?: { enabled?: boolean };
 }
 
 export interface SpotifyContentConfig {

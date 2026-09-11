@@ -595,7 +595,11 @@ async function handleContentUpdate(
 ): Promise<void> {
   const body = (await deps.readJsonBody(req, res)) as
     | {
-        radio?: { tuneInUsername?: string | null; radioParadise?: { enabled?: boolean } };
+        radio?: {
+          tuneInUsername?: string | null;
+          radioParadise?: { enabled?: boolean };
+          somaFm?: { enabled?: boolean };
+        };
         spotify?: { clientId?: string | null };
         library?: { enabled?: boolean; autoScan?: boolean };
         tts?: AudioServerConfig['content']['tts'];
@@ -624,6 +628,9 @@ async function handleContentUpdate(
       }
       if (body.radio.radioParadise && typeof body.radio.radioParadise.enabled === 'boolean') {
         radio.radioParadise = { enabled: body.radio.radioParadise.enabled };
+      }
+      if (body.radio.somaFm && typeof body.radio.somaFm.enabled === 'boolean') {
+        radio.somaFm = { enabled: body.radio.somaFm.enabled };
       }
       cfg.content.radio = radio;
     }

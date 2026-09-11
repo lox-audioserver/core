@@ -9,6 +9,7 @@ import path from 'node:path';
 import { test, tests, type TestFn } from './testHarness';
 import './sessionKey.test';
 import './buildChannel.test';
+import './somaFmProvider.test';
 import './startWithTimeout.test';
 import './loxoneServiceFolders.test';
 import './loxoneItemType.test';
