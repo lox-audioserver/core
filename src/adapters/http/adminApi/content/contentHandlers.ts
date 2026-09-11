@@ -766,7 +766,11 @@ async function handleTuneInValidate(
       });
       return;
     }
-    deps.sendJson(res, 200, { valid: true, presetCount: check.presetCount });
+    deps.sendJson(res, 200, {
+      valid: true,
+      presetCount: check.presets.length,
+      presets: check.presets,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const isInvalid = /(TuneIn error|HTTP 4\d\d)/i.test(message);

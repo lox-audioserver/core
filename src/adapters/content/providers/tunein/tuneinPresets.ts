@@ -9,7 +9,30 @@ type PresetOutline = {
   key?: string;
   guide_id?: string;
   children?: unknown[];
+  text?: string;
+  subtext?: string;
+  image?: string;
+  bitrate?: string;
+  formats?: string;
+  /** Where the account itself put this preset. Their order is the one worth showing. */
+  preset_number?: string;
 };
+
+/**
+ * One preset, as much of it as a screen showing someone their account needs.
+ *
+ * Everything here rides along on the listing TuneIn already answered with, so naming a
+ * preset costs nothing extra — resolving its stream would cost a request each, and a list
+ * you are only looking at does not need one.
+ */
+export interface TuneInPreset {
+  id: string;
+  name: string;
+  description?: string;
+  logo?: string;
+  bitrate?: number;
+  formats?: string;
+}
 
 /**
  * TuneIn returns an account's presets in one of three layouts, depending on how the
@@ -96,13 +119,44 @@ export async function expandPresetOutlines(
 }
 
 /**
- * Presets that can actually play here. TuneIn keeps geo-blocked and delisted stations
- * in a listing but marks them `unavailable` and points them at a spoken "not supported"
- * clip, so counting them would promise presets that only produce that clip.
+ * Presets that can actually play here, in the order the account arranged them.
+ *
+ * TuneIn keeps geo-blocked and delisted stations in a listing but marks them `unavailable`
+ * and points them at a spoken "not supported" clip, so listing those would promise presets
+ * that only produce that clip.
+ *
+ * Sorted by TuneIn's own preset number where there is one: an account's favourites have an
+ * order its owner chose, and folders are walked in whatever sequence they came back in.
  */
-export function countPlayablePresets(outlines: unknown[]): number {
-  return outlines.filter((raw) => {
-    const outline = (raw ?? {}) as PresetOutline;
-    return outline.type === 'audio' && outline.key !== 'unavailable';
-  }).length;
+export function listPlayablePresets(outlines: unknown[]): TuneInPreset[] {
+  return outlines
+    .map((raw) => (raw ?? {}) as PresetOutline)
+    .filter((outline) => outline.type === 'audio' && outline.key !== 'unavailable')
+    .map((outline, index) => ({ outline, order: presetOrder(outline, index) }))
+    .sort((a, b) => a.order - b.order)
+    .map(({ outline }) => toPreset(outline))
+    .filter((preset): preset is TuneInPreset => preset !== null);
+}
+
+/** A preset's place in the account, or its place in the listing when it has no number. */
+function presetOrder(outline: PresetOutline, index: number): number {
+  const declared = Number.parseInt(outline.preset_number ?? '', 10);
+  return Number.isFinite(declared) ? declared : Number.MAX_SAFE_INTEGER - 1000 + index;
+}
+
+function toPreset(outline: PresetOutline): TuneInPreset | null {
+  const id = outline.guide_id?.trim();
+  const name = outline.text?.trim();
+  if (!id || !name) {
+    return null;
+  }
+  const bitrate = Number.parseInt(outline.bitrate ?? '', 10);
+  return {
+    id,
+    name,
+    ...(outline.subtext?.trim() ? { description: outline.subtext.trim() } : {}),
+    ...(/^https?:\/\//i.test(outline.image ?? '') ? { logo: outline.image as string } : {}),
+    ...(Number.isFinite(bitrate) && bitrate > 0 ? { bitrate } : {}),
+    ...(outline.formats?.trim() ? { formats: outline.formats.trim() } : {}),
+  };
 }

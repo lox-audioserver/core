@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from './testHarness';
 import type { TuneInBrowseResult, TuneInClient } from '../src/adapters/content/providers/tunein/tuneinClient';
 import {
-  countPlayablePresets,
   expandPresetOutlines,
+  listPlayablePresets,
 } from '../src/adapters/content/providers/tunein/tuneinPresets';
 
 // TuneIn returns an account's presets in three different layouts and we only parsed the
@@ -137,8 +137,61 @@ test('nested folders stop at the depth limit', async () => {
   );
 });
 
-test('geo-blocked presets are not counted as playable', () => {
+test('geo-blocked presets are not listed as playable', () => {
   // TuneIn keeps them in the listing but points them at a spoken "not supported" clip.
   const outlines = [station('s1'), station('s2', 'unavailable'), { type: 'text', text: 'no presets' }];
-  assert.equal(countPlayablePresets(outlines), 1);
+  assert.deepEqual(listPlayablePresets(outlines).map((preset) => preset.id), ['s1']);
+});
+
+test('presets come back in the order the account put them in', () => {
+  // Folders are walked in whatever sequence they answered in, which is not the order
+  // somebody arranged their favourites in. TuneIn numbers them; that is the order.
+  const outlines = [
+    { ...(station('s3') as object), preset_number: '3' },
+    { ...(station('s1') as object), preset_number: '1' },
+    { ...(station('s2') as object), preset_number: '2' },
+  ];
+  assert.deepEqual(listPlayablePresets(outlines).map((preset) => preset.id), ['s1', 's2', 's3']);
+});
+
+test('presets without a number keep their listed order, behind the numbered ones', () => {
+  const outlines = [
+    station('sA'),
+    { ...(station('s1') as object), preset_number: '1' },
+    station('sB'),
+  ];
+  assert.deepEqual(
+    listPlayablePresets(outlines).map((preset) => preset.id),
+    ['s1', 'sA', 'sB'],
+  );
+});
+
+test('a preset is described from the listing, without resolving anything', () => {
+  const outlines = [
+    {
+      ...(station('s6707') as object),
+      text: 'NPO 3FM',
+      subtext: 'Music starts here',
+      image: 'http://cdn-profiles.tunein.com/s6707/images/logoq.png',
+      bitrate: '192',
+      formats: 'aac,mp3',
+    },
+  ];
+  assert.deepEqual(listPlayablePresets(outlines), [
+    {
+      id: 's6707',
+      name: 'NPO 3FM',
+      description: 'Music starts here',
+      logo: 'http://cdn-profiles.tunein.com/s6707/images/logoq.png',
+      bitrate: 192,
+      formats: 'aac,mp3',
+    },
+  ]);
+});
+
+test('a logo that is not a url is left off rather than rendered as a broken image', () => {
+  const outlines = [{ ...(station('s1') as object), image: 'logoq.png', bitrate: '0' }];
+  const [preset] = listPlayablePresets(outlines);
+  assert.equal(preset?.logo, undefined);
+  assert.equal(preset?.bitrate, undefined);
 });
