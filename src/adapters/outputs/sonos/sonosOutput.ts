@@ -47,10 +47,11 @@ export interface SonosOutputConfig {
 /**
  * What a Sonos zone actually needs answered.
  *
- * Which speaker this room is, and how good it should sound. Everything else is
- * plumbing for a network that misbehaves, and stays folded away: Music Assistant
- * asks a Sonos household for one thing (a manual address, marked advanced) and
- * finds the rest itself.
+ * How good it should sound. Which speaker is answered by picking one from the
+ * list, so the address behind it is an escape hatch rather than a setting, and
+ * it folds away with the rest of the plumbing. That is where Music Assistant
+ * keeps it too: their entire Sonos configuration is one advanced field for a
+ * manual address, because discovery answers the question everywhere else.
  *
  * Two fields that used to live here are gone. `controlUrl` was the escape hatch
  * for a speaker whose endpoints we could not resolve, which is no longer a state
@@ -65,20 +66,21 @@ export const SONOS_OUTPUT_DEFINITION: OutputConfigDefinition = {
   description: 'Streams audio to a Sonos renderer via UPnP AVTransport.',
   fields: [
     {
-      id: 'host',
-      label: 'Sonos IP or hostname',
-      type: 'text',
-      placeholder: '192.168.1.60',
-      description:
-        'The speaker this zone plays on. Picking one from the list below fills this in; type an address yourself if the speaker is not listed.',
-    },
-    {
       id: 'streamFormat',
       label: 'Sound quality',
       type: 'text',
       placeholder: 'auto',
       description:
         "Sonos players can play FLAC. Set this to 'lossless' to send the music unchanged instead of converting it to MP3; leave it on 'auto' if radio streams or this speaker misbehave.",
+    },
+    {
+      id: 'host',
+      label: 'Sonos IP or hostname',
+      type: 'text',
+      placeholder: '192.168.1.60',
+      advanced: true,
+      description:
+        'Names the speaker by address instead of picking it from the list. Needed where the search cannot reach the speaker — a bridged container, a VLAN — and the list stays empty.',
     },
     {
       id: 'deviceName',
