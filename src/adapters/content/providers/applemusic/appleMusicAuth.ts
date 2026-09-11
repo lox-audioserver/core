@@ -91,6 +91,37 @@ export function buildBaseHeaders(userToken?: string): Record<string, string> {
 }
 
 /**
+ * Flatten an error into a reason worth logging.
+ *
+ * `fetch` reports every connection-level failure as the same opaque "fetch failed"; what
+ * actually distinguishes a blocked DNS lookup from a dead IPv6 route from an untrusted CA
+ * sits in `cause` (and, when Node raced both address families, in an `AggregateError`).
+ * Walk that chain so a warning names the cause instead of the symptom.
+ */
+export function describeFetchError(err: unknown): string {
+  if (!(err instanceof Error)) return String(err);
+  const parts: string[] = [];
+  const seen = new Set<unknown>();
+  let current: unknown = err;
+  while (current instanceof Error && !seen.has(current)) {
+    seen.add(current);
+    parts.push(describeSingleError(current));
+    current = (current as { cause?: unknown }).cause;
+  }
+  return parts.join(' <- ');
+}
+
+function describeSingleError(err: Error): string {
+  const code = (err as { code?: string }).code;
+  const base = code ? `${err.message} (${code})` : err.message;
+  if (!(err instanceof AggregateError) || !err.errors?.length) return base;
+  const inner = err.errors
+    .map((e) => (e instanceof Error ? describeSingleError(e) : String(e)))
+    .join('; ');
+  return `${base} [${inner}]`;
+}
+
+/**
  * Scrape a MusicKit developer (bearer) token from the Apple Music web player bundle.
  *
  * Returns the token string, or null if the JS bundle or the embedded token can't be located

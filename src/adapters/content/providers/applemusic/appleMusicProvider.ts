@@ -15,7 +15,7 @@ import {
   mapRecommendationItem,
   pickAlbumShelf,
 } from './appleMusicParsers';
-import { getShippedDeveloperToken, buildBaseHeaders, scrapeBearerToken } from './appleMusicAuth';
+import { getShippedDeveloperToken, buildBaseHeaders, scrapeBearerToken, describeFetchError } from './appleMusicAuth';
 import { collageKey, collageCachedUrl, ensureCollage } from '@/shared/playlistCollage';
 import type { ContentProvider, ProviderSearchCategories, ProviderSearchResult } from '@/adapters/content/ContentProvider';
 
@@ -571,7 +571,7 @@ export class AppleMusicProvider implements ContentProvider {
           await sleep(this.computeRetryDelay(null, attempt));
           continue;
         }
-        this.log.warn('apple music request failed', { url: requestUrl, message: err instanceof Error ? err.message : String(err) });
+        this.log.warn('apple music request failed', { url: requestUrl, message: describeFetchError(err) });
         return null;
       }
     }
@@ -964,7 +964,7 @@ export class AppleMusicProvider implements ContentProvider {
         this.bearerTokenFetchedAt = Date.now();
         return token;
       } catch (err) {
-        this.log.warn('apple music token fetch failed', { message: err instanceof Error ? err.message : String(err) });
+        this.log.warn('apple music token fetch failed', { message: describeFetchError(err) });
         return null;
       }
     })();

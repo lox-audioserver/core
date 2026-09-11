@@ -36,7 +36,7 @@ import {
   stripM3u8Attribute,
   isHlsUrl,
 } from './appleMusicHls';
-import { getShippedDeveloperToken, buildBaseHeaders, scrapeBearerToken } from './appleMusicAuth';
+import { getShippedDeveloperToken, buildBaseHeaders, scrapeBearerToken, describeFetchError } from './appleMusicAuth';
 import { gunzipSync } from 'zlib';
 import { Agent } from 'undici';
 import { type IncomingMessage, type ServerResponse } from 'node:http';
@@ -1460,7 +1460,7 @@ export class AppleMusicStreamService {
         state.fetchedAt = Date.now();
         return token;
       } catch (err) {
-        this.log.warn('apple music bearer fetch failed', { message: err instanceof Error ? err.message : String(err) });
+        this.log.warn('apple music bearer fetch failed', { message: describeFetchError(err) });
         return null;
       } finally {
         state.inFlight = undefined;
