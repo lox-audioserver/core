@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { spawn } from 'node:child_process';
 import https from 'node:https';
+import { assertBundleFitsCore, readCoreVersion } from './bundleCompat.mjs';
 
 const repo = 'sonn-audio/adminui';
 const assetName = 'admin-dist.tgz';
@@ -103,3 +104,7 @@ if (await hasLocalAdminUi()) {
   await extract(archivePath, targetDir);
   await fs.rm(archivePath, { force: true });
 }
+
+// After both paths, because a checked-in UI can outrun this core exactly as a downloaded
+// one can — and the local build is the case where it happens during development.
+await assertBundleFitsCore(targetDir, await readCoreVersion(process.cwd()), 'admin ui');

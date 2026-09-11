@@ -11,6 +11,27 @@ export type UpdateCheckLatest = {
   corePrerelease: string | null;
   ui: string | null;
   player: string | null;
+  /**
+   * Newest *prerelease* of each web bundle, for an install on the beta channel.
+   *
+   * Alongside `ui`/`player` rather than replacing them, for the same reason `core` and
+   * `corePrerelease` sit side by side: the Admin UI reading this payload may be older
+   * than the server writing it, so the stable fields have to keep meaning what they did.
+   */
+  uiPrerelease: string | null;
+  playerPrerelease: string | null;
+  /**
+   * The `minCore` each of those releases states, so the console can tell the user a bundle
+   * is out of reach *before* they press the button and collect a 409.
+   *
+   * Read from a `version.json` published beside the tarball. Null both when a release
+   * states no minimum and when it predates minimums entirely — the same answer, and the
+   * same consequence: nothing here blocks it, and the server's preflight is the backstop.
+   */
+  uiMinCore: string | null;
+  uiPrereleaseMinCore: string | null;
+  playerMinCore: string | null;
+  playerPrereleaseMinCore: string | null;
   /** Newest published build of the client the speakers run. */
   sonnClient: string | null;
   components: Record<string, string>;
@@ -24,6 +45,12 @@ export type GithubPart = {
   corePrerelease: string | null;
   ui: string | null;
   player: string | null;
+  uiPrerelease: string | null;
+  playerPrerelease: string | null;
+  uiMinCore: string | null;
+  uiPrereleaseMinCore: string | null;
+  playerMinCore: string | null;
+  playerPrereleaseMinCore: string | null;
   sonnClient: string | null;
 };
 export type NpmPart = {
@@ -36,6 +63,12 @@ const EMPTY_GITHUB: GithubPart = {
   corePrerelease: null,
   ui: null,
   player: null,
+  uiPrerelease: null,
+  playerPrerelease: null,
+  uiMinCore: null,
+  uiPrereleaseMinCore: null,
+  playerMinCore: null,
+  playerPrereleaseMinCore: null,
   sonnClient: null,
 };
 const EMPTY_NPM: NpmPart = { components: {}, componentDescriptions: {} };
@@ -175,34 +208,93 @@ export function createUpdateChecker(deps: UpdateCheckerDeps): UpdateChecker {
     return null;
   }
 
-  async function fetchRepoLatestPrerelease(repo: string): Promise<string | null> {
-    const data = await deps.fetchJson(`https://api.github.com/repos/${repo}/releases?per_page=20`);
-    if (!Array.isArray(data)) return null;
-    const found = data.find(
-      (r) =>
-        r &&
-        typeof r === 'object' &&
-        (r as { prerelease?: boolean }).prerelease &&
-        !(r as { draft?: boolean }).draft,
+  /**
+   * Both answers for one repo — newest release and newest prerelease — from one listing.
+   *
+   * Asking twice would be the obvious shape and is the wrong one. The listing already
+   * contains both, and this check now wants both for three repos rather than one, so a
+   * lookup each would double what a refreshed check costs from a budget of sixty an hour.
+   * Falling back to the walk only when no ordinary release appears in the window keeps the
+   * common case at a single request per repo.
+   *
+   * A refusal propagates, which is what leaves the cache holding what it already knew. A
+   * 404 does not: a repo with no releases has *answered*, and turning that into a rejection
+   * would take the other repos' tags down with it — they share one `Promise.all`.
+   */
+  async function fetchRepoLatest(repo: string): Promise<{ tag: string | null; prerelease: string | null }> {
+    let data: unknown = null;
+    try {
+      data = await deps.fetchJson(`https://api.github.com/repos/${repo}/releases?per_page=20`);
+    } catch (err) {
+      if (isRefusal(err)) throw err;
+    }
+    const entries = (Array.isArray(data) ? data : []).filter(
+      (r): r is { tag_name?: string; prerelease?: boolean } =>
+        !!r && typeof r === 'object' && !(r as { draft?: boolean }).draft,
     );
-    return found ? ((found as { tag_name?: string }).tag_name ?? null) : null;
+    const pick = (wantPrerelease: boolean): string | null =>
+      entries.find((r) => (r.prerelease === true) === wantPrerelease)?.tag_name ?? null;
+
+    const prerelease = pick(true);
+    const tag = pick(false);
+    // No ordinary release inside the window — a repo that only ships prereleases, or one
+    // whose last stable is more than twenty releases back. The walk still finds it.
+    return { tag: tag ?? (await fetchRepoLatestTag(repo)), prerelease };
+  }
+
+  /**
+   * The minimum core a published bundle release states, from the `version.json` uploaded
+   * beside its tarball.
+   *
+   * Swallows every failure, unlike the tag lookups above, and the difference is on purpose.
+   * This is enrichment: without it the console simply cannot grey a button out early, and
+   * the server's preflight refuses the install anyway. Letting a missing manifest — which
+   * every release from before this feature has — reject would take the whole batch of
+   * versions down with it for the sake of a nicety.
+   *
+   * These come off `github.com/<repo>/releases/download/...`, not the API host, so they
+   * cost nothing from the hourly request budget the rest of this file is careful with.
+   */
+  async function fetchReleaseMinCore(repo: string, tag: string | null): Promise<string | null> {
+    if (!tag) return null;
+    try {
+      const data = await deps.fetchJson(
+        `https://github.com/${repo}/releases/download/${encodeURIComponent(tag)}/version.json`,
+      );
+      const minCore = (data as { minCore?: unknown } | null)?.minCore;
+      return typeof minCore === 'string' && minCore.trim() ? minCore.trim() : null;
+    } catch {
+      return null;
+    }
   }
 
   /** Release tags for core/UI/player. Rejects when the API refused, so the caller
    *  keeps what it knew instead of storing four nulls as an answer. */
   async function fetchGithubPart(): Promise<GithubPart> {
-    const [coreTag, corePrereleaseTag, uiTag, playerTag, sonnClientTag] = await Promise.all([
-      fetchRepoLatestTag(coreRepo),
-      fetchRepoLatestPrerelease(coreRepo),
-      fetchRepoLatestTag(uiRepo),
-      fetchRepoLatestTag(playerRepo),
+    const [core, ui, player, sonnClientTag] = await Promise.all([
+      fetchRepoLatest(coreRepo),
+      fetchRepoLatest(uiRepo),
+      fetchRepoLatest(playerRepo),
+      // The speaker client has no prerelease channel of its own, so one lookup is enough.
       fetchRepoLatestTag(sonnClientRepo),
     ]);
+    const [uiMin, uiPreMin, playerMin, playerPreMin] = await Promise.all([
+      fetchReleaseMinCore(uiRepo, ui.tag),
+      fetchReleaseMinCore(uiRepo, ui.prerelease),
+      fetchReleaseMinCore(playerRepo, player.tag),
+      fetchReleaseMinCore(playerRepo, player.prerelease),
+    ]);
     return {
-      core: stripV(coreTag),
-      corePrerelease: stripV(corePrereleaseTag),
-      ui: stripV(uiTag),
-      player: stripV(playerTag),
+      core: stripV(core.tag),
+      corePrerelease: stripV(core.prerelease),
+      ui: stripV(ui.tag),
+      player: stripV(player.tag),
+      uiPrerelease: stripV(ui.prerelease),
+      playerPrerelease: stripV(player.prerelease),
+      uiMinCore: uiMin,
+      uiPrereleaseMinCore: uiPreMin,
+      playerMinCore: playerMin,
+      playerPrereleaseMinCore: playerPreMin,
       sonnClient: stripV(sonnClientTag),
     };
   }
@@ -259,16 +351,10 @@ export function createUpdateChecker(deps: UpdateCheckerDeps): UpdateChecker {
         github.get(force).catch(() => EMPTY_GITHUB),
         npm.get(force).catch(() => EMPTY_NPM),
       ]);
+      // Spread rather than restated field by field: the two halves together *are* the
+      // payload, and listing them here only created a third place to forget one.
       return {
-        latest: {
-          core: githubPart.core,
-          corePrerelease: githubPart.corePrerelease,
-          ui: githubPart.ui,
-          player: githubPart.player,
-          sonnClient: githubPart.sonnClient,
-          components: npmPart.components,
-          componentDescriptions: npmPart.componentDescriptions,
-        },
+        latest: { ...githubPart, ...npmPart },
         checkedAt: new Date(now()).toISOString(),
       };
     },

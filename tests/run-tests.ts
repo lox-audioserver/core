@@ -185,6 +185,7 @@ import './mixedGroupFanout.test';
 import './loxoneZoneProjection.test';
 import './adminZoneStates.test';
 import './adminInfo.test';
+import './bundleCompat.test';
 import './updateCheck.test';
 import './coverArtTuneIn.test';
 import './tuneinPresets.test';

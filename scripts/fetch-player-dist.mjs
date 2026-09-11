@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { pipeline } from 'node:stream/promises';
 import { spawn } from 'node:child_process';
 import https from 'node:https';
+import { assertBundleFitsCore, readCoreVersion } from './bundleCompat.mjs';
 
 const comingSoonHtml = join(dirname(fileURLToPath(import.meta.url)), 'player-coming-soon.html');
 
@@ -114,3 +115,9 @@ if (await hasLocalPlayer()) {
     await fs.copyFile(comingSoonHtml, join(targetDir, 'index.html'));
   }
 }
+
+// Outside the catch above on purpose. That fallback answers "there is no player to install",
+// and an incompatible one is a different thing: quietly swapping it for a placeholder would
+// turn a fixable version mismatch into a build that ships without a player and says so once,
+// in a warning nobody reads. The placeholder itself carries no manifest, so it passes here.
+await assertBundleFitsCore(targetDir, await readCoreVersion(process.cwd()), 'player');

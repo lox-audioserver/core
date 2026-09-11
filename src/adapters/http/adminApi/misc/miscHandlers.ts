@@ -7,6 +7,16 @@ import os from 'node:os';
 import { join, resolve } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { readBuildChannel, readBuildVersion, readGitBranch, readPackageVersion } from '@/shared/serverVersion';
+import { compareVersions, satisfiesMin } from '@/shared/semver';
+import {
+  describeBundle,
+  manifestFrom,
+  readBundleManifest,
+  readCoreBundleRequirements,
+  rejectIfCoreTooOld,
+  type BundleManifest,
+  type WebBundleName,
+} from '@/shared/bundleManifest';
 import type { ComponentLogger } from '@/shared/logging/logger';
 import { logManager } from '@/shared/logging/logger';
 import { logBuffer } from '@/shared/logging/logBuffer';
@@ -56,6 +66,21 @@ type AdminUiUpdateResult = {
   targetDir: string;
   updatedAt?: string;
   error?: string;
+  /**
+   * Why it did not happen, when the answer is not "something broke".
+   *
+   * `core-too-old` is the bundle refusing this server rather than a failure to install,
+   * and the route turns it into a 409 so the UI can say which core is needed instead of
+   * showing the red box it shows for a download that died halfway.
+   */
+  reason?: 'core-too-old';
+  /** The same text as `error`, under the key the Admin UI's error handler reads. */
+  message?: string;
+  /** The `minCore` the rejected bundle asked for, and what this server runs. */
+  requiredCore?: string;
+  runningCore?: string;
+  /** The version that was installed, read back from the swapped-in manifest. */
+  installed?: string | null;
 };
 
 /** Result of a server-core update. Extends the web-bundle shape with the
@@ -120,21 +145,15 @@ export type MiscHandlerDeps = {
   sendJson: (res: ServerResponse, status: number, body: unknown) => void;
 };
 
-/** Order two dotted versions oldest-first, so a park's laggard sorts to the front. */
-function compareVersions(a: string, b: string): number {
-  const parts = (value: string): number[] =>
-    value
-      .replace(/^v/, '')
-      .split(/[.-]/)
-      .map((piece) => Number.parseInt(piece, 10))
-      .map((piece) => (Number.isFinite(piece) ? piece : 0));
-  const left = parts(a);
-  const right = parts(b);
-  for (let index = 0; index < Math.max(left.length, right.length); index += 1) {
-    const diff = (left[index] ?? 0) - (right[index] ?? 0);
-    if (diff !== 0) return diff;
-  }
-  return 0;
+/**
+ * A refused bundle is not a broken server.
+ *
+ * 409 rather than 500, because nothing went wrong: the install was declined because this
+ * core is older than the bundle requires, the previous bundle is untouched, and the fix is
+ * an action the user takes (update the core first) rather than a retry.
+ */
+function webBundleFailureStatus(result: AdminUiUpdateResult): number {
+  return result.reason === 'core-too-old' ? 409 : 500;
 }
 
 export function buildMiscRoutes(deps: MiscHandlerDeps): Route[] {
@@ -198,7 +217,7 @@ export function buildMiscRoutes(deps: MiscHandlerDeps): Route[] {
         try {
           const result = await task;
           if (!result.ok) {
-            deps.sendJson(res, 500, result);
+            deps.sendJson(res, webBundleFailureStatus(result), result);
             return;
           }
           deps.sendJson(res, 200, result);
@@ -227,7 +246,7 @@ export function buildMiscRoutes(deps: MiscHandlerDeps): Route[] {
         try {
           const result = await task;
           if (!result.ok) {
-            deps.sendJson(res, 500, result);
+            deps.sendJson(res, webBundleFailureStatus(result), result);
             return;
           }
           deps.sendJson(res, 200, result);
@@ -403,7 +422,12 @@ function handleInfo(
     const pkgVersion = readPackageVersion();
     const buildVersion = readBuildVersion(pkgVersion);
     const packages = readAddonPackageVersions();
-    const player = { installed: readPlayerVersion(deps.runtimeConfig.http.publicDir) };
+    // Judged against the package version, not the build version: a nightly's `+dev-2026…`
+    // stamp distinguishes two builds of the same core and must not change whether a
+    // bundle fits it.
+    const publicDir = deps.runtimeConfig.http.publicDir;
+    const player = describeBundle(publicDir, 'player', pkgVersion);
+    const adminUi = describeBundle(publicDir, 'admin', pkgVersion);
     // The oldest, because that is what "the speakers run X" has to mean when they disagree.
     const runningClients = (deps.sonnClientVersions?.() ?? []).filter(Boolean).sort(compareVersions);
     const sonnClient = { installed: runningClients[0] ?? null };
@@ -432,6 +456,18 @@ function handleInfo(
       loxoneEnabled: cfg.system.audioserver.loxoneEnabled === true,
       packages,
       player,
+      // Added alongside `player`, never replacing it: an Admin UI older than this server
+      // reads `player.installed` and must keep working, which is the whole point of the
+      // compatibility work this field belongs to.
+      adminUi,
+      /**
+       * The other direction: bundle versions this core wants to be talking to.
+       *
+       * It cannot be enforced — a console too old to serve is already the one rendering
+       * the page — so it is reported for the UI to say out loud and point at its own
+       * update button.
+       */
+      requires: readCoreBundleRequirements(resolve(process.cwd(), 'package.json')),
       sonnClient,
       containerized,
       // Whether a server-core update will auto-restart, so the UI can either
@@ -679,19 +715,6 @@ function readDeclaredAddonPackages(): Record<string, string> {
   }
 }
 
-/** Reads the Player bundle's installed version from the version.json emitted
- *  into public/player by the player build. Returns null when the player has
- *  not been fetched/built yet or the manifest predates versioning. */
-function readPlayerVersion(publicDir: string): string | null {
-  try {
-    const json = readFileSync(join(publicDir, 'player', 'version.json'), 'utf8');
-    const parsed = JSON.parse(json) as { version?: string };
-    return typeof parsed.version === 'string' && parsed.version.trim() ? parsed.version.trim() : null;
-  } catch {
-    return null;
-  }
-}
-
 function readInstalledPackageVersion(name: string): string | null {
   try {
     const parts = name.split('/').filter(Boolean);
@@ -729,7 +752,7 @@ type WebBundleSpec = {
   repo: string;
   assetName: string;
   /** Sub-directory under publicDir that holds the served bundle. */
-  publicSubdir: string;
+  publicSubdir: WebBundleName;
   /** Prefix for the temp staging/backup dirs + archive file. */
   workPrefix: string;
   /** Optional env overrides for the release tag and full dist URL. */
@@ -757,6 +780,172 @@ const PLAYER_BUNDLE: WebBundleSpec = {
   distUrlEnv: 'PLAYER_DIST_URL',
 };
 
+/** The manifest a release publishes beside its tarball, so which bundle fits can be
+ *  decided before downloading megabytes of it. Absent on every release from before
+ *  manifests existed, which reads as "makes no claim" — see `satisfiesMin`. */
+function bundleManifestUrl(spec: WebBundleSpec, tag: string): string {
+  return `https://github.com/${spec.repo}/releases/download/${encodeURIComponent(tag)}/version.json`;
+}
+
+function bundleAssetUrl(spec: WebBundleSpec, tag: string): string {
+  return `https://github.com/${spec.repo}/releases/download/${encodeURIComponent(tag)}/${spec.assetName}`;
+}
+
+/** One release of a web bundle, as far as choosing between them needs to know. */
+type BundleRelease = { tag: string; prerelease: boolean };
+
+/**
+ * Recent releases of a bundle repo, newest first.
+ *
+ * Deliberately not `releases/latest`: that endpoint never resolves to a prerelease, which
+ * is the whole reason a beta bundle could not reach a beta install before this. Drafts and
+ * releases without the tarball are dropped here so the caller never resolves to a 404.
+ */
+async function fetchBundleReleases(spec: WebBundleSpec): Promise<BundleRelease[]> {
+  const data = await fetchUpstreamJson(
+    `https://api.github.com/repos/${spec.repo}/releases?per_page=30`,
+  );
+  if (!Array.isArray(data)) {
+    return [];
+  }
+  const out: BundleRelease[] = [];
+  for (const entry of data) {
+    if (!entry || typeof entry !== 'object') continue;
+    const rel = entry as {
+      tag_name?: string;
+      prerelease?: boolean;
+      draft?: boolean;
+      assets?: Array<{ name?: string }>;
+    };
+    if (rel.draft) continue;
+    if (!Array.isArray(rel.assets) || !rel.assets.some((a) => a?.name === spec.assetName)) continue;
+    const tag = typeof rel.tag_name === 'string' ? rel.tag_name.trim() : '';
+    if (tag) {
+      out.push({ tag, prerelease: rel.prerelease === true });
+    }
+  }
+  return out;
+}
+
+/** How many candidates to inspect before giving up and taking the newest of the channel.
+ *  Each costs one small HTTPS request, and a bundle more than a handful of releases ahead
+ *  of this core is a mismatch worth reporting rather than silently reaching back past. */
+const BUNDLE_LOOKBACK = 6;
+
+type ResolvedBundleRelease = {
+  release: string;
+  distUrl: string;
+  channel: ReleaseChannel | 'pinned';
+  /** What made the choice, for the log line that explains a surprising pick. */
+  picked: 'pinned' | 'compatible' | 'newest' | 'fallback-latest';
+};
+
+/**
+ * Which release of a web bundle this install should get.
+ *
+ * Three rules, in order.
+ *
+ * **Pinned wins.** An explicit tag or a `*_DIST_URL` is honoured verbatim; somebody naming
+ * a version is not asking for our opinion. The preflight still runs, so a pin that cannot
+ * work is refused rather than installed.
+ *
+ * **Then the channel, taken from the core.** A bundle is a satellite of the server it is
+ * served by, so a beta core asks for beta bundles. With a fallback that is not optional:
+ * these repos may publish no prereleases at all — adminui never has — and a beta install
+ * must then receive the stable bundle rather than nothing.
+ *
+ * **Then compatibility.** Within the channel, the newest release whose `minCore` this core
+ * satisfies. That is what keeps an install on an older core working: it receives the last
+ * bundle built for it instead of a dead button. When no candidate states a minimum (every
+ * release predating this feature) the first one is the newest one, and the behaviour is
+ * exactly what it was before.
+ */
+async function resolveWebBundleRelease(
+  spec: WebBundleSpec,
+  releaseOverride: string | undefined,
+  log: ComponentLogger,
+): Promise<ResolvedBundleRelease> {
+  const urlOverride = (spec.distUrlEnv ? process.env[spec.distUrlEnv]?.trim() : '') || '';
+  const explicit = (
+    releaseOverride ??
+    (spec.releaseEnv ? process.env[spec.releaseEnv] : undefined) ??
+    ''
+  ).trim();
+
+  if (explicit && explicit !== 'latest') {
+    return {
+      release: explicit,
+      distUrl: urlOverride || bundleAssetUrl(spec, explicit),
+      channel: 'pinned',
+      picked: 'pinned',
+    };
+  }
+  if (urlOverride) {
+    return { release: explicit || 'latest', distUrl: urlOverride, channel: 'pinned', picked: 'pinned' };
+  }
+
+  const channel = detectReleaseChannel();
+  const runningCore = readPackageVersion();
+
+  let releases: BundleRelease[] = [];
+  try {
+    releases = await fetchBundleReleases(spec);
+  } catch (err) {
+    // The listing is an optimisation, not a requirement. Without it we can still install
+    // the stable bundle from the static URL, and the preflight still guards the swap.
+    log.warn(`${spec.label} release listing unavailable, falling back to latest`, {
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+
+  // On the beta channel prereleases come first, but stables stay eligible behind them —
+  // a beta install with no beta bundle published takes the stable one.
+  const candidates =
+    channel === 'beta'
+      ? [...releases.filter((r) => r.prerelease), ...releases.filter((r) => !r.prerelease)]
+      : releases.filter((r) => !r.prerelease);
+
+  for (const candidate of candidates.slice(0, BUNDLE_LOOKBACK)) {
+    let manifest: BundleManifest;
+    try {
+      manifest = manifestFrom(await fetchUpstreamJson(bundleManifestUrl(spec, candidate.tag)));
+    } catch {
+      // No manifest asset: a release from before this existed, which claims nothing and is
+      // therefore installable. Taking it here also stops the walk, which is right — older
+      // releases below it cannot be newer.
+      return {
+        release: candidate.tag,
+        distUrl: bundleAssetUrl(spec, candidate.tag),
+        channel,
+        picked: 'newest',
+      };
+    }
+    if (satisfiesMin(runningCore, manifest.minCore)) {
+      return {
+        release: candidate.tag,
+        distUrl: bundleAssetUrl(spec, candidate.tag),
+        channel,
+        picked: 'compatible',
+      };
+    }
+    log.debug(`${spec.label} release skipped, needs a newer core`, {
+      tag: candidate.tag,
+      minCore: manifest.minCore,
+      runningCore,
+    });
+  }
+
+  // Nothing in the window fit, or the listing never arrived. The static URL is the honest
+  // last answer: it is what this server did before, and the preflight will refuse it with
+  // a message naming the core it needs.
+  return {
+    release: 'latest',
+    distUrl: `https://github.com/${spec.repo}/releases/latest/download/${spec.assetName}`,
+    channel,
+    picked: 'fallback-latest',
+  };
+}
+
 async function performAdminUiUpdate(
   releaseOverride: string | undefined,
   deps: MiscHandlerDeps,
@@ -769,24 +958,30 @@ async function performWebBundleUpdate(
   releaseOverride: string | undefined,
   deps: MiscHandlerDeps,
 ): Promise<AdminUiUpdateResult> {
-  const release =
-    releaseOverride || (spec.releaseEnv ? process.env[spec.releaseEnv] : undefined) || 'latest';
-  const distUrl =
-    (spec.distUrlEnv ? process.env[spec.distUrlEnv] : undefined) ??
-    (release === 'latest'
-      ? `https://github.com/${spec.repo}/releases/latest/download/${spec.assetName}`
-      : `https://github.com/${spec.repo}/releases/download/${encodeURIComponent(release)}/${spec.assetName}`);
   const targetDir = join(deps.runtimeConfig.http.publicDir, spec.publicSubdir);
   const stagingDir = join(deps.runtimeConfig.http.publicDir, `${spec.workPrefix}-staging-${Date.now()}`);
   const backupDir = join(deps.runtimeConfig.http.publicDir, `${spec.workPrefix}-backup-${Date.now()}`);
   const archivePath = join(os.tmpdir(), `${spec.workPrefix}-dist-${Date.now()}.tgz`);
+  const runningCore = readPackageVersion();
 
-  deps.log.info(`${spec.label} update started`, { release, distUrl, targetDir });
-
-  const baseResult = { release, distUrl, targetDir };
+  // Resolved inside the try so a failed listing yields a clean error result rather than a
+  // rejected promise, mirroring how performServerUpdate handles its channel lookup.
+  let release = (releaseOverride ?? '').trim() || 'latest';
+  let distUrl = '';
   let backupCreated = false;
 
   try {
+    const resolved = await resolveWebBundleRelease(spec, releaseOverride, deps.log);
+    release = resolved.release;
+    distUrl = resolved.distUrl;
+    deps.log.info(`${spec.label} update started`, {
+      release,
+      distUrl,
+      channel: resolved.channel,
+      picked: resolved.picked,
+      targetDir,
+    });
+
     try {
       await fs.rm(archivePath, { force: true });
     } catch {
@@ -801,6 +996,35 @@ async function performWebBundleUpdate(
       await fs.rm(archivePath, { force: true });
     } catch {
       // Best-effort cleanup.
+    }
+
+    /*
+     * The gate. Read what the bundle asks for and refuse it here, while the only thing on
+     * disk is a staging directory nobody serves.
+     *
+     * This is the one chokepoint every runtime install passes through — both bundles share
+     * this function, and a pin, an env override and a resolver pick all arrive here — so it
+     * is the only place the check has to exist to be total. Refusing before the swap is
+     * also what makes it free: nothing is rolled back because nothing moved.
+     */
+    const staged = readBundleManifest(stagingDir);
+    const rejection = rejectIfCoreTooOld(runningCore, staged);
+    if (rejection) {
+      await fs.rm(stagingDir, { recursive: true, force: true }).catch(() => {});
+      deps.log.warn(`${spec.label} update refused, needs a newer core`, { release, ...rejection });
+      const sentence = `${spec.label} ${staged.version ?? release} needs server core ${rejection.requiredCore} or newer — this server runs ${rejection.runningCore}. Update the server first.`;
+      return {
+        ok: false,
+        reason: 'core-too-old',
+        error: sentence,
+        // `message` as well, because that is the field the Admin UI's fetch wrapper shows to
+        // a person; without it the card renders the raw JSON body of this very response.
+        message: sentence,
+        ...rejection,
+        release,
+        distUrl,
+        targetDir,
+      };
     }
 
     if (await pathExists(targetDir)) {
@@ -818,8 +1042,18 @@ async function performWebBundleUpdate(
       }
     }
 
-    deps.log.info(`${spec.label} update finished`, { release, distUrl });
-    return { ok: true, updatedAt: new Date().toISOString(), ...baseResult };
+    // Read back from what is now being served, rather than echoing the tag: the two differ
+    // whenever the resolver fell back to `latest`, and the UI shows this as the version.
+    const installed = readBundleManifest(targetDir).version;
+    deps.log.info(`${spec.label} update finished`, { release, distUrl, installed });
+    return {
+      ok: true,
+      updatedAt: new Date().toISOString(),
+      installed,
+      release,
+      distUrl,
+      targetDir,
+    };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     deps.log.warn(`${spec.label} update failed`, { release, distUrl, message });
@@ -848,7 +1082,7 @@ async function performWebBundleUpdate(
       }
     }
 
-    return { ok: false, error: message, ...baseResult };
+    return { ok: false, error: message, release, distUrl, targetDir };
   }
 }
 

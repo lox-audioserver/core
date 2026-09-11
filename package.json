@@ -8,6 +8,10 @@
     "url": "git+https://github.com/sonn-audio/core.git"
   },
   "main": "dist/server.js",
+  "sonn": {
+    "minAdminUi": null,
+    "minPlayer": null
+  },
   "_moduleAliases": {
     "@": "dist"
   },
