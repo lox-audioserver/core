@@ -45,6 +45,37 @@ export function resolveDlnaEndpoints(options: DeviceDiscoveryOptions = {}): Prom
   return promise;
 }
 
+/**
+ * Read a renderer's endpoints straight from its device description.
+ *
+ * {@link resolveDlnaEndpoints} cannot fetch anything until an M-SEARCH has been
+ * answered, so it depends on a multicast round trip. A caller that already knows
+ * where the device lives does not need the search at all — and should not be made
+ * to depend on it, because multicast is the first thing to disappear behind a
+ * bridged container or a VLAN without a querier, while plain HTTP to the device
+ * keeps working the whole time (#374).
+ */
+export async function resolveEndpointsFromDescription(
+  descriptionUrl: string,
+  timeoutMs = 2000,
+): Promise<DlnaEndpointInfo | null> {
+  try {
+    const xml = await fetchWithTimeout(descriptionUrl, timeoutMs);
+    const parsed = parseDeviceDescription(xml, descriptionUrl);
+    if (!parsed.controlUrl) {
+      log.debug('device description carries no AVTransport control URL', { descriptionUrl });
+      return null;
+    }
+    return { ...parsed, descriptionUrl };
+  } catch (error) {
+    log.debug('device description fetch failed', {
+      descriptionUrl,
+      message: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
 // Some renderers (notably a few B&O/Samsung models) answer SSDP unreliably, so a single scan
 // randomly misses them. We remember devices seen recently and merge them back in, so a device
 // that was visible moments ago doesn't flicker out of the list on one dropped burst.

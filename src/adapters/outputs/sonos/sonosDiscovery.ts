@@ -1,4 +1,8 @@
 import type { SonosDiscoveredDevice, SonosDiscoveryOptions } from '@/ports/OutputDiscoveryPort';
+import {
+  resolveEndpointsFromDescription,
+  type DlnaEndpointInfo,
+} from '@/adapters/outputs/dlna/dlnaDiscovery';
 import dgram from 'node:dgram';
 import os from 'node:os';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -238,6 +242,30 @@ async function fetchTopology(host: string, timeoutMs: number): Promise<string | 
   } finally {
     clearTimeout(timeout);
   }
+}
+
+/**
+ * Endpoints for a player we already have an address for, without asking the network.
+ *
+ * A zone that names its Sonos by IP still had its endpoints resolved over SSDP, so a
+ * speaker that answers every HTTP request we make came back as "no Sonos endpoints
+ * discovered" wherever multicast replies do not reach us — a bridged Docker network,
+ * a VLAN without an IGMP querier (#374). Music Assistant draws the line in the same
+ * place: a configured address is talked to directly, and discovery exists only to
+ * find the players nobody named.
+ */
+export async function resolveSonosEndpointsByHost(
+  host: string,
+  timeoutMs = 2000,
+): Promise<DlnaEndpointInfo | null> {
+  const normalized = normalizeHost(host);
+  if (!normalized) {
+    return null;
+  }
+  return resolveEndpointsFromDescription(
+    `http://${normalized}:1400/xml/device_description.xml`,
+    timeoutMs,
+  );
 }
 
 export async function resolveSonosCoordinatorHost(options: {

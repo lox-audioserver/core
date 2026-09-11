@@ -106,6 +106,7 @@ import './sourceDurationLearned.test';
 import './runtimeShutdown.test';
 import './sourceResolver.test';
 import './beolinkStateController.test';
+import './sonosEndpointResolution.test';
 import './sonosTransportResilience.test';
 import './externalStateRouter.test';
 import './equalizerRestartScheduler.test';

@@ -15,7 +15,7 @@ import {
   type SonosGroup,
   type SonosPlayer,
 } from '@sonn-audio/node-sonos';
-import { resolveDlnaEndpoints } from '@/adapters/outputs/dlna/dlnaDiscovery';
+import { resolveDlnaEndpoints, type DlnaEndpointInfo } from '@/adapters/outputs/dlna/dlnaDiscovery';
 import { resolveSessionCover, isHttpUrl } from '@/shared/coverArt';
 import {
   chooseStreamProfile,
@@ -26,7 +26,11 @@ import {
 } from '@/domain/outputs/streamProfilePolicy';
 import { buildBaseUrl, normalizeStreamUrl, resolveAbsoluteUrl, upsertQueryParam } from '@/shared/streamUrl';
 import { decodeAudiopath } from '@/domain/zones/audiopath';
-import { discoverSonosDevice, resolveSonosCoordinatorHost } from '@/adapters/outputs/sonos/sonosDiscovery';
+import {
+  discoverSonosDevice,
+  resolveSonosCoordinatorHost,
+  resolveSonosEndpointsByHost,
+} from '@/adapters/outputs/sonos/sonosDiscovery';
 import type { OutputPorts } from '@/adapters/outputs/outputPorts';
 
 export interface SonosOutputConfig {
@@ -618,7 +622,7 @@ export class SonosOutput implements ZoneOutput {
       this.log.warn('Sonos command skipped; no host or control URL configured', { zoneId: this.zoneId });
       return false;
     }
-    this.discoveryPromise = resolveDlnaEndpoints({ host })
+    this.discoveryPromise = this.resolveEndpoints(host)
       .then((info) => {
         if (info) {
           this.applyDiscoveredEndpoints(info);
@@ -631,6 +635,28 @@ export class SonosOutput implements ZoneOutput {
         this.discoveryPromise = undefined;
       });
     return this.discoveryPromise;
+  }
+
+  /**
+   * Endpoints for a host we already know, preferring a direct read over a search.
+   *
+   * The description fetch is one HTTP GET to an address the config already names.
+   * The SSDP fallback behind it is a multicast window measured in seconds that a
+   * bridged container never hears an answer in, which is how a reachable speaker
+   * ended up reported as undiscoverable (#374). Keeping the search as a fallback
+   * costs nothing and still covers a player that serves its description somewhere
+   * other than the usual place.
+   */
+  private async resolveEndpoints(host: string): Promise<DlnaEndpointInfo | null> {
+    const direct = await resolveSonosEndpointsByHost(host);
+    if (direct) {
+      return direct;
+    }
+    this.log.debug('Sonos description not readable; falling back to SSDP', {
+      zoneId: this.zoneId,
+      host,
+    });
+    return resolveDlnaEndpoints({ host });
   }
 
   private async ensureHost(): Promise<string | null> {
