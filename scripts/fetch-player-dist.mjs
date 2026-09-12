@@ -6,18 +6,23 @@ import { fileURLToPath } from 'node:url';
 import { pipeline } from 'node:stream/promises';
 import { spawn } from 'node:child_process';
 import https from 'node:https';
-import { assertBundleFitsCore, readCoreVersion } from './bundleCompat.mjs';
+import { assertBundleFitsCore, readCoreVersion, resolveBundleUrl } from './bundleCompat.mjs';
 
 const comingSoonHtml = join(dirname(fileURLToPath(import.meta.url)), 'player-coming-soon.html');
 
 const repo = 'sonn-audio/player';
 const assetName = 'player-dist.tgz';
-const release = process.env.PLAYER_RELEASE ?? 'latest';
-const distUrl =
-  process.env.PLAYER_DIST_URL ??
-  (release === 'latest'
-    ? `https://github.com/${repo}/releases/latest/download/${assetName}`
-    : `https://github.com/${repo}/releases/download/${release}/${assetName}`);
+// Not simply `releases/latest`: the bundle repos move on, so a core built from an older
+// branch asks for the newest release it can actually serve. Pins and a full URL still win,
+// and a checkout with no `dist/` yet falls back to exactly what this used to do.
+const { distUrl } = await resolveBundleUrl({
+  cwd: process.cwd(),
+  repo,
+  assetName,
+  releaseEnv: 'PLAYER_RELEASE',
+  distUrlEnv: 'PLAYER_DIST_URL',
+  label: 'player',
+});
 
 const targetDir = join(process.cwd(), 'public', 'player');
 const archivePath = join(tmpdir(), `player-dist-${Date.now()}.tgz`);

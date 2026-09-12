@@ -7,14 +7,12 @@ import os from 'node:os';
 import { join, resolve } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { isDevBuild, readBuildChannel, readBuildVersion, readGitBranch, readPackageVersion } from '@/shared/serverVersion';
-import { compareVersions, satisfiesMin } from '@/shared/semver';
+import { compareVersions } from '@/shared/semver';
 import {
   describeBundle,
-  manifestFrom,
   readBundleManifest,
   readCoreBundleRequirements,
   rejectIfCoreTooOld,
-  type BundleManifest,
   type WebBundleName,
 } from '@/shared/bundleManifest';
 import type { ComponentLogger } from '@/shared/logging/logger';
@@ -31,6 +29,12 @@ import type { SonnCorePeerRegistry } from '@/adapters/discovery/sonnCorePeerRegi
 import { buildAudioServersList } from '@/adapters/discovery/audioServersList';
 import { defaultConfig } from '@/adapters/http/adminApi/config/configHandlers';
 import { fetchUpstreamJson } from '@/adapters/http/adminApi/misc/upstreamJson';
+import {
+  bundleAssetUrl,
+  resolveBundleRelease,
+  type ReleaseChannel,
+  type ResolvedBundleRelease,
+} from '@/shared/bundleRelease';
 import { createUpdateChecker } from '@/adapters/http/adminApi/misc/updateCheck';
 
 const ADDON_PACKAGE_PREFIX = '@sonn-audio/node-';
@@ -785,91 +789,21 @@ const PLAYER_BUNDLE: WebBundleSpec = {
   distUrlEnv: 'PLAYER_DIST_URL',
 };
 
-/** The manifest a release publishes beside its tarball, so which bundle fits can be
- *  decided before downloading megabytes of it. Absent on every release from before
- *  manifests existed, which reads as "makes no claim" — see `satisfiesMin`. */
-function bundleManifestUrl(spec: WebBundleSpec, tag: string): string {
-  return `https://github.com/${spec.repo}/releases/download/${encodeURIComponent(tag)}/version.json`;
-}
-
-function bundleAssetUrl(spec: WebBundleSpec, tag: string): string {
-  return `https://github.com/${spec.repo}/releases/download/${encodeURIComponent(tag)}/${spec.assetName}`;
-}
-
-/** One release of a web bundle, as far as choosing between them needs to know. */
-type BundleRelease = { tag: string; prerelease: boolean };
-
-/**
- * Recent releases of a bundle repo, newest first.
- *
- * Deliberately not `releases/latest`: that endpoint never resolves to a prerelease, which
- * is the whole reason a beta bundle could not reach a beta install before this. Drafts and
- * releases without the tarball are dropped here so the caller never resolves to a 404.
- */
-async function fetchBundleReleases(spec: WebBundleSpec): Promise<BundleRelease[]> {
-  const data = await fetchUpstreamJson(
-    `https://api.github.com/repos/${spec.repo}/releases?per_page=30`,
-  );
-  if (!Array.isArray(data)) {
-    return [];
-  }
-  const out: BundleRelease[] = [];
-  for (const entry of data) {
-    if (!entry || typeof entry !== 'object') continue;
-    const rel = entry as {
-      tag_name?: string;
-      prerelease?: boolean;
-      draft?: boolean;
-      assets?: Array<{ name?: string }>;
-    };
-    if (rel.draft) continue;
-    if (!Array.isArray(rel.assets) || !rel.assets.some((a) => a?.name === spec.assetName)) continue;
-    const tag = typeof rel.tag_name === 'string' ? rel.tag_name.trim() : '';
-    if (tag) {
-      out.push({ tag, prerelease: rel.prerelease === true });
-    }
-  }
-  return out;
-}
-
-/** How many candidates to inspect before giving up and taking the newest of the channel.
- *  Each costs one small HTTPS request, and a bundle more than a handful of releases ahead
- *  of this core is a mismatch worth reporting rather than silently reaching back past. */
-const BUNDLE_LOOKBACK = 6;
-
-type ResolvedBundleRelease = {
-  release: string;
-  distUrl: string;
-  channel: ReleaseChannel | 'pinned';
-  /** What made the choice, for the log line that explains a surprising pick. */
-  picked: 'pinned' | 'compatible' | 'newest' | 'fallback-latest';
-};
-
 /**
  * Which release of a web bundle this install should get.
  *
- * Three rules, in order.
+ * A pin wins outright — an explicit tag or a `*_DIST_URL` is honoured verbatim, because
+ * somebody naming a version is not asking for our opinion. The preflight still runs, so a
+ * pin that cannot work is refused rather than installed.
  *
- * **Pinned wins.** An explicit tag or a `*_DIST_URL` is honoured verbatim; somebody naming
- * a version is not asking for our opinion. The preflight still runs, so a pin that cannot
- * work is refused rather than installed.
- *
- * **Then the channel, taken from the core.** A bundle is a satellite of the server it is
- * served by, so a beta core asks for beta bundles. With a fallback that is not optional:
- * these repos may publish no prereleases at all — adminui never has — and a beta install
- * must then receive the stable bundle rather than nothing.
- *
- * **Then compatibility.** Within the channel, the newest release whose `minCore` this core
- * satisfies. That is what keeps an install on an older core working: it receives the last
- * bundle built for it instead of a dead button. When no candidate states a minimum (every
- * release predating this feature) the first one is the newest one, and the behaviour is
- * exactly what it was before.
+ * Everything else is `resolveBundleRelease`, shared with the build so an image cannot bake
+ * in a console the running server would have refused.
  */
 async function resolveWebBundleRelease(
   spec: WebBundleSpec,
   releaseOverride: string | undefined,
   log: ComponentLogger,
-): Promise<ResolvedBundleRelease> {
+): Promise<ResolvedBundleRelease & { channel: ReleaseChannel | 'pinned' }> {
   const urlOverride = (spec.distUrlEnv ? process.env[spec.distUrlEnv]?.trim() : '') || '';
   const explicit = (
     releaseOverride ??
@@ -880,92 +814,26 @@ async function resolveWebBundleRelease(
   if (explicit && explicit !== 'latest') {
     return {
       release: explicit,
-      distUrl: urlOverride || bundleAssetUrl(spec, explicit),
+      distUrl: urlOverride || bundleAssetUrl(spec.repo, spec.assetName, explicit),
       channel: 'pinned',
-      picked: 'pinned',
-    };
-  }
-  if (urlOverride) {
-    return { release: explicit || 'latest', distUrl: urlOverride, channel: 'pinned', picked: 'pinned' };
-  }
-
-  const channel = detectReleaseChannel();
-  const runningCore = readPackageVersion();
-  // Dev takes the newest of its channel outright. Walking for a compatible release would be
-  // walking past bundles this server can serve, on the strength of a version string that is
-  // stale by design between releases — and it would spend a request per candidate doing it.
-  const newestWins = isDevBuild();
-
-  let releases: BundleRelease[] = [];
-  try {
-    releases = await fetchBundleReleases(spec);
-  } catch (err) {
-    // The listing is an optimisation, not a requirement. Without it we can still install
-    // the stable bundle from the static URL, and the preflight still guards the swap.
-    log.warn(`${spec.label} release listing unavailable, falling back to latest`, {
-      message: err instanceof Error ? err.message : String(err),
-    });
-  }
-
-  // On the beta channel prereleases come first, but stables stay eligible behind them —
-  // a beta install with no beta bundle published takes the stable one.
-  const candidates =
-    channel === 'beta'
-      ? [...releases.filter((r) => r.prerelease), ...releases.filter((r) => !r.prerelease)]
-      : releases.filter((r) => !r.prerelease);
-
-  const first = candidates[0];
-  if (newestWins && first) {
-    log.debug(`${spec.label} taking the newest release, minimums are waived on dev`, {
-      tag: first.tag,
-    });
-    return {
-      release: first.tag,
-      distUrl: bundleAssetUrl(spec, first.tag),
-      channel,
       picked: 'newest',
     };
   }
-
-  for (const candidate of candidates.slice(0, BUNDLE_LOOKBACK)) {
-    let manifest: BundleManifest;
-    try {
-      manifest = manifestFrom(await fetchUpstreamJson(bundleManifestUrl(spec, candidate.tag)));
-    } catch {
-      // No manifest asset: a release from before this existed, which claims nothing and is
-      // therefore installable. Taking it here also stops the walk, which is right — older
-      // releases below it cannot be newer.
-      return {
-        release: candidate.tag,
-        distUrl: bundleAssetUrl(spec, candidate.tag),
-        channel,
-        picked: 'newest',
-      };
-    }
-    if (satisfiesMin(runningCore, manifest.minCore)) {
-      return {
-        release: candidate.tag,
-        distUrl: bundleAssetUrl(spec, candidate.tag),
-        channel,
-        picked: 'compatible',
-      };
-    }
-    log.debug(`${spec.label} release skipped, needs a newer core`, {
-      tag: candidate.tag,
-      minCore: manifest.minCore,
-      runningCore,
-    });
+  if (urlOverride) {
+    return { release: explicit || 'latest', distUrl: urlOverride, channel: 'pinned', picked: 'newest' };
   }
 
-  // Nothing in the window fit, or the listing never arrived. The static URL is the honest
-  // last answer: it is what this server did before, and the preflight will refuse it with
-  // a message naming the core it needs.
-  return {
-    release: 'latest',
-    distUrl: `https://github.com/${spec.repo}/releases/latest/download/${spec.assetName}`,
+  const channel = detectReleaseChannel();
+  const resolved = await resolveBundleRelease({
+    repo: spec.repo,
+    assetName: spec.assetName,
+    coreVersion: readPackageVersion(),
     channel,
-    picked: 'fallback-latest',
-  };
+    newestWins: isDevBuild(),
+    fetchJson: fetchUpstreamJson,
+    log: (message, detail) => log.debug(`${spec.label} ${message}`, detail ?? {}),
+  });
+  return { ...resolved, channel };
 }
 
 async function performAdminUiUpdate(
@@ -1137,7 +1005,6 @@ function fileSha256(path: string): string | null {
   }
 }
 
-type ReleaseChannel = 'stable' | 'beta';
 type ResolvedRelease = { release: string; distUrl: string; channel: ReleaseChannel | 'pinned' };
 
 /** Determines the release channel from the running version: a SemVer prerelease

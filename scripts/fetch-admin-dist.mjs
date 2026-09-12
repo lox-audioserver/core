@@ -5,16 +5,21 @@ import { join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { spawn } from 'node:child_process';
 import https from 'node:https';
-import { assertBundleFitsCore, readCoreVersion } from './bundleCompat.mjs';
+import { assertBundleFitsCore, readCoreVersion, resolveBundleUrl } from './bundleCompat.mjs';
 
 const repo = 'sonn-audio/adminui';
 const assetName = 'admin-dist.tgz';
-const release = process.env.ADMINUI_RELEASE ?? 'latest';
-const distUrl =
-  process.env.ADMINUI_DIST_URL ??
-  (release === 'latest'
-    ? `https://github.com/${repo}/releases/latest/download/${assetName}`
-    : `https://github.com/${repo}/releases/download/${release}/${assetName}`);
+// Not simply `releases/latest`: the bundle repos move on, so a core built from an older
+// branch asks for the newest release it can actually serve. Pins and a full URL still win,
+// and a checkout with no `dist/` yet falls back to exactly what this used to do.
+const { distUrl } = await resolveBundleUrl({
+  cwd: process.cwd(),
+  repo,
+  assetName,
+  releaseEnv: 'ADMINUI_RELEASE',
+  distUrlEnv: 'ADMINUI_DIST_URL',
+  label: 'admin ui',
+});
 
 const targetDir = join(process.cwd(), 'public', 'admin');
 const archivePath = join(tmpdir(), `admin-dist-${Date.now()}.tgz`);

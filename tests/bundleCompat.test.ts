@@ -14,6 +14,11 @@ import {
 } from '../src/shared/bundleManifest';
 import { buildMiscRoutes } from '../src/adapters/http/adminApi/misc/miscHandlers';
 import { isDevBuild } from '../src/shared/serverVersion';
+import {
+  bundleManifestUrl,
+  channelFor,
+  resolveBundleRelease,
+} from '../src/shared/bundleRelease';
 
 /*
  * The Admin UI and the Player are separate repositories, updated by separate buttons, in
@@ -221,4 +226,154 @@ test('a dev build is one that says so, never one that failed to say otherwise', 
   } finally {
     process.chdir(cwd);
   }
+});
+
+/*
+ * Which release a core is offered.
+ *
+ * This decision used to live inside the update handler, where it was private and reached the
+ * network, so nothing tested it. It is asked from two places that must not disagree — the
+ * server when somebody presses update, the build when it assembles an image — and an image
+ * that bakes in a console the running server would refuse is the failure the whole mechanism
+ * exists to prevent. So it is pinned here, with the network stood in for.
+ */
+
+const REPO = 'o/ui';
+const ASSET = 'admin-dist.tgz';
+
+function releases(entries: Array<{ tag: string; prerelease?: boolean; minCore?: string | null; asset?: boolean }>) {
+  const listing = entries.map((e) => ({
+    tag_name: e.tag,
+    prerelease: e.prerelease === true,
+    draft: false,
+    assets: e.asset === false ? [] : [{ name: ASSET }],
+  }));
+  const manifests = new Map(
+    entries
+      .filter((e) => e.minCore !== undefined)
+      .map((e) => [bundleManifestUrl(REPO, e.tag), { version: e.tag.replace(/^v/, ''), minCore: e.minCore }]),
+  );
+  const asked: string[] = [];
+  const fetchJson = async (url: string): Promise<unknown> => {
+    asked.push(url);
+    if (url.startsWith('https://api.github.com/')) return listing;
+    if (manifests.has(url)) return manifests.get(url);
+    // Releases from before manifests existed have no such asset.
+    throw new Error(`404 ${url}`);
+  };
+  return { fetchJson, asked };
+}
+
+test('an older core is offered the last bundle built for it, not the newest one', async () => {
+  const { fetchJson } = releases([
+    { tag: 'v6.2.0', minCore: '4.1.0-beta.1' },
+    { tag: 'v6.1.1', minCore: '4.0.0-beta.22' },
+    { tag: 'v6.0.0', minCore: null },
+  ]);
+  const resolved = await resolveBundleRelease({
+    repo: REPO,
+    assetName: ASSET,
+    coreVersion: '4.0.0-beta.22',
+    channel: 'beta',
+    fetchJson,
+  });
+  // Not v6.2.0, which this core cannot serve, and not a failure either: the newest that fits.
+  assert.equal(resolved.release, 'v6.1.1');
+  assert.equal(resolved.picked, 'compatible');
+  assert.ok(resolved.distUrl.endsWith(`/download/v6.1.1/${ASSET}`));
+});
+
+test('a release that states nothing ends the walk, because nothing below it is newer', async () => {
+  const { fetchJson, asked } = releases([
+    { tag: 'v6.2.0' },
+    { tag: 'v6.1.1', minCore: '4.0.0-beta.22' },
+  ]);
+  const resolved = await resolveBundleRelease({
+    repo: REPO,
+    assetName: ASSET,
+    coreVersion: '3.1.0',
+    channel: 'stable',
+    fetchJson,
+  });
+  assert.equal(resolved.release, 'v6.2.0', 'a bundle from before minimums installs onto anything');
+  assert.equal(asked.filter((u) => u.includes('version.json')).length, 1, 'and stops the walk');
+});
+
+test('a beta core prefers a prerelease but still accepts the stable behind it', async () => {
+  const withBeta = releases([
+    { tag: 'v6.2.0-beta.1', prerelease: true, minCore: '4.0.0-beta.22' },
+    { tag: 'v6.1.1', minCore: '4.0.0-beta.22' },
+  ]);
+  assert.equal(
+    (await resolveBundleRelease({ repo: REPO, assetName: ASSET, coreVersion: '4.0.0-beta.22', channel: 'beta', fetchJson: withBeta.fetchJson })).release,
+    'v6.2.0-beta.1',
+  );
+
+  // These repos may publish no prereleases at all — adminui never has — so a beta install
+  // must receive the stable bundle rather than nothing.
+  const stablesOnly = releases([{ tag: 'v6.1.1', minCore: '4.0.0-beta.22' }]);
+  assert.equal(
+    (await resolveBundleRelease({ repo: REPO, assetName: ASSET, coreVersion: '4.0.0-beta.22', channel: 'beta', fetchJson: stablesOnly.fetchJson })).release,
+    'v6.1.1',
+  );
+
+  // A stable core never takes a prerelease, even when it is the only thing that fits.
+  const onlyBeta = releases([{ tag: 'v6.2.0-beta.1', prerelease: true, minCore: '4.0.0' }]);
+  assert.equal(
+    (await resolveBundleRelease({ repo: REPO, assetName: ASSET, coreVersion: '4.0.0', channel: 'stable', fetchJson: onlyBeta.fetchJson })).picked,
+    'fallback-latest',
+  );
+});
+
+test('a release without the tarball is never resolved to, since it would 404', async () => {
+  const { fetchJson } = releases([
+    { tag: 'v6.2.0', asset: false, minCore: null },
+    { tag: 'v6.1.1', minCore: null },
+  ]);
+  const resolved = await resolveBundleRelease({
+    repo: REPO,
+    assetName: ASSET,
+    coreVersion: '4.0.0-beta.22',
+    channel: 'stable',
+    fetchJson,
+  });
+  assert.equal(resolved.release, 'v6.1.1');
+});
+
+test('dev takes the newest outright, and spends no requests deciding', async () => {
+  const { fetchJson, asked } = releases([
+    { tag: 'v6.2.0', minCore: '9.9.9' },
+    { tag: 'v6.1.1', minCore: null },
+  ]);
+  const resolved = await resolveBundleRelease({
+    repo: REPO,
+    assetName: ASSET,
+    coreVersion: '4.0.0-beta.21',
+    channel: 'beta',
+    newestWins: true,
+    fetchJson,
+  });
+  assert.equal(resolved.release, 'v6.2.0');
+  assert.equal(asked.filter((u) => u.includes('version.json')).length, 0);
+});
+
+test('an unreachable listing leaves the static url, which is what happened before any of this', async () => {
+  const resolved = await resolveBundleRelease({
+    repo: REPO,
+    assetName: ASSET,
+    coreVersion: '4.0.0-beta.22',
+    channel: 'beta',
+    fetchJson: async () => {
+      throw new Error('github is down');
+    },
+  });
+  assert.equal(resolved.picked, 'fallback-latest');
+  assert.ok(resolved.distUrl.endsWith(`/releases/latest/download/${ASSET}`));
+});
+
+test('the channel follows the core, and the override governs all three artefacts', () => {
+  assert.equal(channelFor('4.0.0-beta.22'), 'beta');
+  assert.equal(channelFor('4.0.0'), 'stable');
+  assert.equal(channelFor('4.0.0', 'beta'), 'beta');
+  assert.equal(channelFor('4.0.0-beta.22', 'stable'), 'stable');
 });

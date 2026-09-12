@@ -22,6 +22,7 @@
  */
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 function parseVersion(input) {
   const trimmed = String(input ?? '').trim().replace(/^v/i, '');
@@ -146,4 +147,77 @@ export async function assertBundleFitsCore(dir, coreVersion, label) {
       `       Pin an older bundle (e.g. ADMINUI_RELEASE / PLAYER_RELEASE=vX.Y.Z), bump the core,\n` +
       `       or set SONN_SKIP_BUNDLE_COMPAT=1 if you know this pairing is fine.`,
   );
+}
+
+/**
+ * The compiled resolver, or null when there is nothing compiled yet.
+ *
+ * `npm run build` runs `tsc` before it fetches the bundles, so during a real build `dist/` is
+ * there and the decision about which release fits is the *same code the server runs* — which
+ * is the point: an image must not bake in a console the running server would have refused.
+ *
+ * Running `npm run fetch:admin` on its own in a fresh clone is the case where it is missing.
+ * That degrades to the static `releases/latest` URL, which is exactly what this did before
+ * any of it existed, and `assertBundleFitsCore` still refuses a pairing that cannot work.
+ */
+async function loadResolver(cwd) {
+  try {
+    const url = (rel) => pathToFileURL(join(cwd, 'dist', rel)).href;
+    const [release, upstream] = await Promise.all([
+      import(url('shared/bundleRelease.js')),
+      import(url('adapters/http/adminApi/misc/upstreamJson.js')),
+    ]);
+    if (typeof release.resolveBundleRelease !== 'function') return null;
+    return { release, fetchJson: upstream.fetchUpstreamJson };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Where to download a bundle from, preferring the newest release this core can actually serve.
+ *
+ * The reason this is not simply `releases/latest`: a bundle repo moves on, and a core being
+ * built from an older branch would otherwise either bake in a console it cannot serve or fail
+ * outright. Reaching one release back is the same answer the server gives an install on an
+ * older core, and it keeps a build of an older core producing a working image.
+ *
+ * Honours the existing pins first — `*_DIST_URL` and `*_RELEASE` name a version, and naming
+ * one is not asking for our opinion.
+ */
+export async function resolveBundleUrl({ cwd, repo, assetName, releaseEnv, distUrlEnv, label }) {
+  const urlOverride = (process.env[distUrlEnv] ?? '').trim();
+  if (urlOverride) return { distUrl: urlOverride, picked: 'pinned' };
+
+  const explicit = (process.env[releaseEnv] ?? '').trim();
+  if (explicit && explicit !== 'latest') {
+    return {
+      distUrl: `https://github.com/${repo}/releases/download/${encodeURIComponent(explicit)}/${assetName}`,
+      picked: 'pinned',
+    };
+  }
+
+  const latest = `https://github.com/${repo}/releases/latest/download/${assetName}`;
+  const loaded = await loadResolver(cwd);
+  if (!loaded) return { distUrl: latest, picked: 'latest' };
+
+  const coreVersion = await readCoreVersion(cwd);
+  try {
+    const resolved = await loaded.release.resolveBundleRelease({
+      repo,
+      assetName,
+      coreVersion,
+      channel: loaded.release.channelFor(coreVersion ?? '', process.env.SERVER_RELEASE_CHANNEL),
+      newestWins: await isDevBuild(cwd),
+      fetchJson: loaded.fetchJson,
+      log: (message, detail) => console.log(`[bundle-compat] ${label}: ${message}`, detail ?? ''),
+    });
+    if (resolved.picked === 'compatible' && resolved.release !== 'latest') {
+      console.log(`[bundle-compat] ${label}: ${resolved.release} is the newest that fits core ${coreVersion}`);
+    }
+    return { distUrl: resolved.distUrl, picked: resolved.picked };
+  } catch (err) {
+    console.warn(`[bundle-compat] ${label}: could not resolve a release (${err?.message ?? err}), using latest`);
+    return { distUrl: latest, picked: 'latest' };
+  }
 }
