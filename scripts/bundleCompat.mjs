@@ -10,7 +10,11 @@
  * Deliberately a hard failure rather than a warning. The asymmetry is what makes that safe:
  * it can only fire when the *bundle* is ahead of the core being built, never when the core
  * is ahead of the bundle, so an ordinary release — core moves first, bundles follow — never
- * sees it. `SONN_SKIP_BUNDLE_COMPAT=1` is there for the deliberate exception.
+ * sees it. `SONN_SKIP_BUNDLE_COMPAT=1` is there for the deliberate one-off.
+ *
+ * Dev is exempt outright — see `isDevBuild`. It is the one branch where the version number is
+ * routinely behind the code, so the comparison is measuring the wrong thing there and only
+ * there.
  *
  * A plain `.mjs` duplicate of `src/shared/semver.ts` on purpose: these scripts run before
  * `tsc` has produced `dist/`, so they cannot import the compiled module they mirror. The
@@ -78,6 +82,33 @@ export function satisfiesMin(running, minimum) {
   return compareVersions(have, min) >= 0;
 }
 
+/**
+ * Whether this build is explicitly a development one, in which case minimums do not apply.
+ *
+ * On `dev` the version number is the only thing behind: the branch carries the endpoints of
+ * the next release while still calling itself the last one, so a bundle built against those
+ * endpoints fails a check that is, on this branch alone, measuring the wrong thing. Dev takes
+ * the newest of everything — nobody runs it except to try a fix.
+ *
+ * Declared rather than assumed. `BUILD_CHANNEL` is what CI sets, and it is read first because
+ * a CI checkout is on a detached HEAD and has no branch to read. Falling back to the branch is
+ * for the developer running `npm run build` in their own working copy. A checkout that is
+ * neither is not dev, and stays gated.
+ */
+export async function isDevBuild(cwd) {
+  const declared = (process.env.BUILD_CHANNEL ?? '').trim().toLowerCase();
+  if (declared) return declared === 'dev';
+  const stamp = (process.env.BUILD_TIMESTAMP ?? '').trim().toLowerCase();
+  if (stamp.startsWith('dev-')) return true;
+  if (stamp.startsWith('testing-')) return false;
+  try {
+    const head = await fs.readFile(join(cwd, '.git', 'HEAD'), 'utf8');
+    return /^ref:\s*refs\/heads\/dev\s*$/i.test(head.trim());
+  } catch {
+    return false;
+  }
+}
+
 export async function readCoreVersion(cwd) {
   try {
     const pkg = JSON.parse(await fs.readFile(join(cwd, 'package.json'), 'utf8'));
@@ -96,6 +127,10 @@ export async function readCoreVersion(cwd) {
  */
 export async function assertBundleFitsCore(dir, coreVersion, label) {
   if ((process.env.SONN_SKIP_BUNDLE_COMPAT ?? '').trim() === '1') return;
+  if (await isDevBuild(process.cwd())) {
+    console.log(`[bundle-compat] dev build, taking ${label} as published`);
+    return;
+  }
   let manifest;
   try {
     manifest = JSON.parse(await fs.readFile(join(dir, 'version.json'), 'utf8'));

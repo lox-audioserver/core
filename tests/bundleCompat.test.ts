@@ -13,6 +13,7 @@ import {
   rejectIfCoreTooOld,
 } from '../src/shared/bundleManifest';
 import { buildMiscRoutes } from '../src/adapters/http/adminApi/misc/miscHandlers';
+import { isDevBuild } from '../src/shared/serverVersion';
 
 /*
  * The Admin UI and the Player are separate repositories, updated by separate buttons, in
@@ -172,4 +173,52 @@ test('info reports both bundles, so the console is no longer the one part unname
   assert.equal(sent.body.player.installed, null);
   assert.equal(sent.body.player.satisfied, true);
   assert.ok('requires' in sent.body, 'the other direction is reported even when unset');
+});
+
+/*
+ * Dev is exempt. It is the one branch whose version number is behind its own code — it
+ * carries the endpoints of the next release while still calling itself the last one — so a
+ * minimum written against those endpoints refuses a bundle the server can serve. Nobody runs
+ * dev except to try a fix, and what they need there is the newest of everything.
+ */
+
+function withEnv<T>(env: Record<string, string | undefined>, fn: () => T): T {
+  const previous = new Map(Object.keys(env).map((key) => [key, process.env[key]]));
+  for (const [key, value] of Object.entries(env)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+  try {
+    return fn();
+  } finally {
+    for (const [key, value] of previous) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+}
+
+test('a dev build is one that says so, never one that failed to say otherwise', () => {
+  const clean = { BUILD_CHANNEL: undefined, BUILD_TIMESTAMP: undefined };
+  assert.equal(withEnv({ ...clean, BUILD_CHANNEL: 'dev' }, isDevBuild), true);
+  assert.equal(withEnv({ ...clean, BUILD_CHANNEL: 'beta' }, isDevBuild), false);
+  assert.equal(withEnv({ ...clean, BUILD_CHANNEL: 'stable' }, isDevBuild), false);
+  // Older images predate BUILD_CHANNEL and stamp the channel into the build id.
+  assert.equal(withEnv({ ...clean, BUILD_TIMESTAMP: 'dev-20260912' }, isDevBuild), true);
+  assert.equal(withEnv({ ...clean, BUILD_TIMESTAMP: 'testing-20260912' }, isDevBuild), false);
+
+  /*
+   * The one that matters. `readBuildChannel` answers `dev` for anything that does not claim
+   * otherwise, which is right for a warning and wrong for a permission: a server-dist tarball
+   * unpacked outside a repository declares nothing, and must not inherit what dev may do.
+   * Asserted from a working directory with no `.git`, which is exactly that deployment.
+   */
+  const nowhere = mkdtempSync(join(tmpdir(), 'sonn-nogit-'));
+  const cwd = process.cwd();
+  process.chdir(nowhere);
+  try {
+    assert.equal(withEnv(clean, isDevBuild), false, 'silence is not a claim to be dev');
+  } finally {
+    process.chdir(cwd);
+  }
 });

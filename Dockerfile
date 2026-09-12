@@ -18,6 +18,14 @@ RUN npm config delete proxy \
     && npm config delete https-proxy \
     && npm ci
 COPY . .
+
+# The build fetches the Admin UI and Player bundles and checks them against this source
+# tree's version. On dev that version is behind the code by design, so the check is waived
+# there and the image carries the newest bundles — which is the point of a dev image.
+# It has to be declared in this stage: ARGs do not cross stages, `.git` is not copied in, so
+# the branch cannot be read here either, and without it every build looks like "not dev".
+ARG BUILD_CHANNEL
+ENV BUILD_CHANNEL=${BUILD_CHANNEL}
 RUN npm run build
 RUN npm prune --omit=dev
 

@@ -134,8 +134,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Declared here as well as on the image below, because `npm run build` fetches the web
+      # bundles and checks them against this checkout's version — and on dev that version is
+      # behind the code by design, so the newest bundle is what this image should carry.
+      # A CI checkout is on a detached HEAD, so the branch cannot be read; it has to be said.
       - name: Build
         run: npm run build
+        env:
+          BUILD_CHANNEL: dev
 
       - name: Run tests
         run: npm test

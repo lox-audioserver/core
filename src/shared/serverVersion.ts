@@ -89,6 +89,36 @@ export function readBuildChannel(): BuildChannel {
   return 'dev';
 }
 
+/**
+ * Whether this is explicitly a development build.
+ *
+ * Separate from `readBuildChannel` because of that function's default: it answers `dev`
+ * for anything that does not claim otherwise, which is the right way round for a warning
+ * ("this might not be a release") and the wrong way round for a permission. A deployment
+ * that simply carries no channel — a server-dist tarball unpacked outside a repository —
+ * must not inherit whatever dev is allowed to do.
+ *
+ * What it is allowed to do is skip the bundle compatibility gate. On `dev` the version
+ * number is the only thing that lags: the branch carries the endpoints of the next release
+ * while still calling itself the last one, so a bundle built against those endpoints is
+ * refused by a check that is, on this branch alone, measuring the wrong thing. Nobody runs
+ * dev except to try a fix, and what they need there is the newest of everything.
+ */
+export function isDevBuild(): boolean {
+  const declared = process.env.BUILD_CHANNEL?.trim().toLowerCase();
+  if (declared && (BUILD_CHANNELS as readonly string[]).includes(declared)) {
+    return declared === 'dev';
+  }
+  const stamp = process.env.BUILD_TIMESTAMP?.trim().toLowerCase() ?? '';
+  if (stamp.startsWith('dev-')) {
+    return true;
+  }
+  if (stamp.startsWith('testing-')) {
+    return false;
+  }
+  return readGitBranch()?.trim().toLowerCase() === 'dev';
+}
+
 /** Appends the CI build stamp when present, so nightly builds are distinguishable. */
 export function readBuildVersion(pkgVersion: string = readPackageVersion()): string {
   const tsRaw = process.env.BUILD_TIMESTAMP?.trim();

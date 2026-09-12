@@ -6,7 +6,7 @@ import https from 'node:https';
 import os from 'node:os';
 import { join, resolve } from 'node:path';
 import { pipeline } from 'node:stream/promises';
-import { readBuildChannel, readBuildVersion, readGitBranch, readPackageVersion } from '@/shared/serverVersion';
+import { isDevBuild, readBuildChannel, readBuildVersion, readGitBranch, readPackageVersion } from '@/shared/serverVersion';
 import { compareVersions, satisfiesMin } from '@/shared/semver';
 import {
   describeBundle,
@@ -426,8 +426,13 @@ function handleInfo(
     // stamp distinguishes two builds of the same core and must not change whether a
     // bundle fits it.
     const publicDir = deps.runtimeConfig.http.publicDir;
-    const player = describeBundle(publicDir, 'player', pkgVersion);
-    const adminUi = describeBundle(publicDir, 'admin', pkgVersion);
+    // On dev every bundle fits, because dev installs every bundle. Reporting otherwise would
+    // put a permanent "built for a newer server" note on a branch that is meant to run ahead.
+    const dev = isDevBuild();
+    const fitsAnything = (bundle: ReturnType<typeof describeBundle>) =>
+      dev ? { ...bundle, satisfied: true } : bundle;
+    const player = fitsAnything(describeBundle(publicDir, 'player', pkgVersion));
+    const adminUi = fitsAnything(describeBundle(publicDir, 'admin', pkgVersion));
     // The oldest, because that is what "the speakers run X" has to mean when they disagree.
     const runningClients = (deps.sonnClientVersions?.() ?? []).filter(Boolean).sort(compareVersions);
     const sonnClient = { installed: runningClients[0] ?? null };
@@ -886,6 +891,10 @@ async function resolveWebBundleRelease(
 
   const channel = detectReleaseChannel();
   const runningCore = readPackageVersion();
+  // Dev takes the newest of its channel outright. Walking for a compatible release would be
+  // walking past bundles this server can serve, on the strength of a version string that is
+  // stale by design between releases — and it would spend a request per candidate doing it.
+  const newestWins = isDevBuild();
 
   let releases: BundleRelease[] = [];
   try {
@@ -904,6 +913,19 @@ async function resolveWebBundleRelease(
     channel === 'beta'
       ? [...releases.filter((r) => r.prerelease), ...releases.filter((r) => !r.prerelease)]
       : releases.filter((r) => !r.prerelease);
+
+  const first = candidates[0];
+  if (newestWins && first) {
+    log.debug(`${spec.label} taking the newest release, minimums are waived on dev`, {
+      tag: first.tag,
+    });
+    return {
+      release: first.tag,
+      distUrl: bundleAssetUrl(spec, first.tag),
+      channel,
+      picked: 'newest',
+    };
+  }
 
   for (const candidate of candidates.slice(0, BUNDLE_LOOKBACK)) {
     let manifest: BundleManifest;
@@ -1008,7 +1030,10 @@ async function performWebBundleUpdate(
      * also what makes it free: nothing is rolled back because nothing moved.
      */
     const staged = readBundleManifest(stagingDir);
-    const rejection = rejectIfCoreTooOld(runningCore, staged);
+    // Waived on dev, where the version number is the only thing behind: the branch already
+    // carries the endpoints of the next release while still calling itself the last one, so
+    // the minimum would refuse a bundle this server can serve perfectly well.
+    const rejection = isDevBuild() ? null : rejectIfCoreTooOld(runningCore, staged);
     if (rejection) {
       await fs.rm(stagingDir, { recursive: true, force: true }).catch(() => {});
       deps.log.warn(`${spec.label} update refused, needs a newer core`, { release, ...rejection });
